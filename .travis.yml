@@ -25,7 +25,8 @@ install:
   - pip install travis-sphinx nbsphinx
   - export PATH=$HOME/.local/bin:$PATH
   - pip install pep8 pytest-pep8 python-coveralls pytest-cov
-  - pip install theano sphinxcontrib-napoleon sphinx_rtd_theme
+  - pip install sphinxcontrib-napoleon sphinx_rtd_theme
+  - pip install theano
   - python setup.py install
 script:
   - PYTHONPATH=$PWD:$PYTHONPATH pytest --cov=delfi;
