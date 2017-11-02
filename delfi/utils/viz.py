@@ -259,13 +259,13 @@ def plot_pdf(pdf1, lims, pdf2=None, gt=None, contours=False, levels=(0.68, 0.95)
 
                     if ticks:
                         ax[r, c].get_yaxis().set_tick_params(
-                            which='both', direction='out', labelsize=fontscale * 20)
+                            which='both', direction='out', labelsize=fontscale * 15)
                         ax[r, c].get_xaxis().set_tick_params(
-                            which='both', direction='out', labelsize=fontscale * 20)
+                            which='both', direction='out', labelsize=fontscale * 15)
 #                         ax[r, c].locator_params(nbins=3)
                         ax[r, c].set_xticks(np.linspace(
-                            lims[i, 0], lims[j, 1], 2))
-                        ax[r, c].set_yticks(np.linspace(min(pp), max(pp), 2))
+                            lims[i, 0]+0.15*np.abs(lims[i, 0]-lims[j, 1]), lims[j, 1]-0.15*np.abs(lims[i, 0]-lims[j, 1]), 2))
+                        ax[r, c].set_yticks(np.linspace(0+0.15*np.abs(0-max(pp)), max(pp)-0.15*np.abs(0-max(pp)), 2))
                         ax[r, c].xaxis.set_major_formatter(
                             mpl.ticker.FormatStrFormatter('%.1f'))
                         ax[r, c].yaxis.set_major_formatter(
@@ -276,7 +276,7 @@ def plot_pdf(pdf1, lims, pdf2=None, gt=None, contours=False, levels=(0.68, 0.95)
 
                     if labels_params is not None:
                         ax[r, c].set_xlabel(
-                            labels_params[i], fontsize=fontscale * 15)
+                            labels_params[i], fontsize=fontscale * 20)
                     else:
                         ax[r, c].set_xlabel([])
 
