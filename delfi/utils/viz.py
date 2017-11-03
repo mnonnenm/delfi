@@ -308,8 +308,8 @@ def plot_pdf(pdf1, lims, pdf2=None, gt=None, contours=False, levels=(0.68, 0.95)
                     if samples is not None:
                         H, xedges, yedges = np.histogram2d(
                             samples[i, :], samples[j, :], bins=30, normed=True)
-                        ax[i, j].imshow(np.flipud(H), origin='lower', extent=[
-                                        xedges[0], xedges[-1], yedges[0], yedges[-1]])
+                        ax[i, j].imshow(H, origin='lower', extent=[
+                                        yedges[0], yedges[-1], xedges[0], xedges[-1]])
 
                     xx = np.linspace(lims[i, 0], lims[i, 1], resolution)
                     yy = np.linspace(lims[j, 0], lims[j, 1], resolution)
@@ -319,8 +319,8 @@ def plot_pdf(pdf1, lims, pdf2=None, gt=None, contours=False, levels=(0.68, 0.95)
                     pp = pdf.eval(xy, ii=[i, j], log=False)
                     pp = pp.reshape(list(X.shape))
                     if contours:
-                        ax[i, j].contour(X, Y, probs2contours(
-                            np.flipud(pp.T), levels), levels, colors=('w', 'y'))
+                        ax[i, j].contour(Y, X, probs2contours(
+                            pp, levels), levels, colors=('w', 'y'))
                     else:
                         ax[i, j].imshow(pp.T, origin='lower', cmap=cmaps.parula,
                                         extent=[lims[j, 0], lims[j, 1], lims[i, 0], lims[i, 1]],
