@@ -63,7 +63,7 @@ class SNPE(BaseInference):
         # placeholder for importance weights
         self.network.iws = tt.vector('iws', dtype=dtype)
 
-    def loss(self, N):
+    def loss(self, N, round_cl=1):
         """Loss function for training
 
         Parameters
@@ -79,7 +79,7 @@ class SNPE(BaseInference):
         self.observables['loss.raw_loss'] = loss
 
         if self.svi:
-            if self.round == 1:
+            if self.round <= round_cl:
                 # weights close to zero-centered prior in the first round
                 if self.reg_lambda > 0:
                     kl, imvs = svi_kl_zero(self.network.mps, self.network.sps,
@@ -99,7 +99,7 @@ class SNPE(BaseInference):
         return loss
 
     def run(self, n_train=100, n_rounds=2, epochs=100, minibatch=50,
-            stop_on_nan=False, monitor=None, **kwargs):
+            round_cl=1, stop_on_nan=False, monitor=None, **kwargs):
         """Run algorithm
 
         Parameters
@@ -119,6 +119,8 @@ class SNPE(BaseInference):
             Names of variables to record during training along with the value
             of the loss function. The observables attribute contains all
             possible variables that can be monitored
+        round_cl : int
+            Round after which to start continual learning
         stop_on_nan : bool
             If True, will halt if NaNs in the loss are encountered
         kwargs : additional keyword arguments
@@ -177,11 +179,15 @@ class SNPE(BaseInference):
                 p_proposal = self.generator.proposal.eval(params, log=False)
                 iws *= p_prior / p_proposal
 
+            # normalize weights
+            iws = (iws/np.sum(iws))*n_train_round
+
             trn_data = (trn_data[0], trn_data[1], iws)
             trn_inputs = [self.network.params, self.network.stats,
                           self.network.iws]
 
-            t = Trainer(self.network, self.loss(N=n_train_round),
+            t = Trainer(self.network,
+                        self.loss(N=n_train_round, round_cl=round_cl),
                         trn_data=trn_data, trn_inputs=trn_inputs,
                         seed=self.gen_newseed(),
                         monitor=self.monitor_dict_from_names(monitor),
