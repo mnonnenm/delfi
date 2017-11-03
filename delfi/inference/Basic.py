@@ -6,8 +6,8 @@ from delfi.neuralnet.loss.regularizer import svi_kl_zero
 
 
 class Basic(BaseInference):
-    def __init__(self, generator, obs=None, prior_norm=True, pilot_samples=100,
-                 reg_lambda=100., seed=None, verbose=True, **kwargs):
+    def __init__(self, generator, obs=None, prior_norm=False, pilot_samples=100,
+                 reg_lambda=0.01, seed=None, verbose=True, **kwargs):
         """Basic inference algorithm
 
         Uses samples from the prior for density estimation LFI. Network can be
