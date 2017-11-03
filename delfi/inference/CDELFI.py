@@ -112,9 +112,12 @@ class CDELFI(BaseInference):
             Dictionaries contain information logged while training the networks
         trn_datasets : list of (params, stats)
             training datasets, z-transformed
+        posteriors : list of posteriors
+            posterior after each round
         """
         logs = []
         trn_datasets = []
+        posteriors = []
 
         for r in range(1, n_rounds + 1):  # start at 1
             # if round > 1, set new proposal distribution before sampling
@@ -152,6 +155,8 @@ class CDELFI(BaseInference):
                 for p in [s for s in new_params if 'means' in s or
                           'precisions' in s]:
                     new_params[p] = old_params[p[:-1] + '0']
+                    new_params[p] += 1.0e-6*self.rng.randn(*new_params[p].shape)
+
                 self.network.params_dict = new_params
 
             trn_inputs = [self.network.params, self.network.stats]
@@ -164,7 +169,9 @@ class CDELFI(BaseInference):
                                 verbose=verbose))
             trn_datasets.append(trn_data)
 
-        return logs, trn_datasets
+            posteriors.append(self.predict(self.obs))
+
+        return logs, trn_datasets, posteriors
 
     def predict(self, x):
         """Predict posterior given x

@@ -6,7 +6,7 @@ from delfi.neuralnet.loss.regularizer import svi_kl_zero
 
 
 class Basic(BaseInference):
-    def __init__(self, generator, prior_norm=True, pilot_samples=100,
+    def __init__(self, generator, obs=None, prior_norm=True, pilot_samples=100,
                  reg_lambda=100., seed=None, verbose=True, **kwargs):
         """Basic inference algorithm
 
@@ -17,6 +17,8 @@ class Basic(BaseInference):
         ----------
         generator : generator instance
             Generator instance
+        obs : array or None
+            Observation in the format the generator returns (1 x n_summary)
         prior_norm : bool
             If set to True, will z-transform params based on mean/std of prior
         pilot_samples : None or int
@@ -46,6 +48,7 @@ class Basic(BaseInference):
         super().__init__(generator, prior_norm=prior_norm,
                          pilot_samples=pilot_samples, seed=seed,
                          verbose=verbose, **kwargs)
+        self.obs = obs
         self.reg_lambda = reg_lambda
 
     def loss(self, N):
@@ -95,6 +98,8 @@ class Basic(BaseInference):
             dict containing the loss values as returned by Trainer.train()
         trn_data : (params, stats)
             training dataset, z-transformed
+        posterior : distribution or None
+            posterior for obs if obs is not None
         """
         trn_data = self.gen(n_train, verbose=self.verbose)  # z-transformed
         trn_inputs = [self.network.params, self.network.stats]
@@ -105,4 +110,6 @@ class Basic(BaseInference):
                     seed=self.gen_newseed(), **kwargs)
         log = t.train(epochs=epochs, minibatch=minibatch, verbose=self.verbose)
 
-        return log, trn_data
+        posterior = self.predict(self.obs) if self.obs is not None else None
+
+        return log, trn_data, posterior

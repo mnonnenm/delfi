@@ -130,9 +130,12 @@ class SNPE(BaseInference):
             Dictionaries contain information logged while training the networks
         trn_datasets : list of (params, stats)
             training datasets, z-transformed
+        posteriors : list of distributions
+            posterior after each round
         """
         logs = []
         trn_datasets = []
+        posteriors = []
 
         for r in range(n_rounds):
             self.round += 1
@@ -188,4 +191,6 @@ class SNPE(BaseInference):
 
             trn_datasets.append(trn_data)
 
-        return logs, trn_datasets
+            posteriors.append(self.predict(self.obs))
+
+        return logs, trn_datasets, posteriors
