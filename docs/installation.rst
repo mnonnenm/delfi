@@ -13,7 +13,7 @@ You can install delfi by
 
 .. code-block:: console
 
-    pip install delfi --user
+    pip install delfi --user --process-dependency-links
 
 Note that depending on how your system is set up, you may need to type ``pip3`` instead of ``pip``.
 
@@ -43,7 +43,7 @@ If you installed using pip, you can update the package using:
 
 .. code-block:: console
 
-    pip install delfi --upgrade --upgrade-strategy only-if-needed --user
+    pip install delfi --upgrade --upgrade-strategy only-if-needed --user --process-dependency-links
 
 If you installed by cloning the repository, pull from upstream. Re-execute the install command, in case you used ``setup.py install``. This step is not necessary if you used ``setup.py develop``, since the package directory is linked symbolically.
 
