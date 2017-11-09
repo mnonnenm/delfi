@@ -11,7 +11,7 @@ dtype = theano.config.floatX
 
 class SNPE(BaseInference):
     def __init__(self, generator, obs, prior_norm=False, pilot_samples=100,
-                 convert_to_T=None, reg_lambda=0.01, seed=None, verbose=True,
+                 convert_to_T=3, reg_lambda=0.01, seed=None, verbose=True,
                  **kwargs):
         """Sequential neural posterior estimation (SNPE)
 
