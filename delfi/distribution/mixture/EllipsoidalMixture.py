@@ -11,7 +11,7 @@ from scipy.special import gammaincinv
 
 class MoE(BaseMixture):
     def __init__(self, a, ms=None, Ps=None, Us=None, Ss=None, xs=None,
-                 seed=None):
+                 seed=None, beta=0.99):
         """Mixture of Ellipsoidals
 
         Creates a MoE with a valid combination of parameters or an already given
@@ -33,6 +33,8 @@ class MoE(BaseMixture):
             List of gaussian variables
         seed : int or None
             If provided, random number generator will be seeded
+        beta : float
+            Mass to preserve when sampling
         """
         if ms is not None:
             super().__init__(
@@ -74,39 +76,39 @@ class MoE(BaseMixture):
         else:
             raise ValueError('Mean information missing')
 
+        self.threshold = 2 * gammaincinv(0.5 * self.ndim, beta)
+
     @copy_ancestor_docstring
-    def gen(self, n_samples=1, beta=0.99):
+    def gen(self, n_samples=1):
         for i in range(len(self.xs)):
             self.xs[i].L = la.cholesky(self.xs[i].S)
 
         samp = []
         for _ in range(n_samples):
-            samp.append(self.gen_single(beta))
+            samp.append(self.gen_single())
         samp = np.array(samp)
 
         return samp
 
-    def gen_single(self, beta):
+    def gen_single(self):
         """Generate single sample
         """
-        threshold = 2 * gammaincinv(0.5 * self.ndim, beta)
-
-        def draw_proposal(xs, threshold):
+        def draw_proposal(xs):
             μ = xs.m
             L = xs.L
-            x = self.uni_rand_ellipse(L * np.sqrt(threshold))
+            x = self.uni_rand_ellipse(L * np.sqrt(self.threshold))
             return x.ravel() + μ.ravel()
 
         while True:
             i = self.gen_comp(1)[0]  # component index
-            x = draw_proposal(self.xs[i], threshold)
+            x = draw_proposal(self.xs[i])
             ρ = np.zeros(self.ncomp)
             for j, xs in enumerate(self.xs):
                 μ = xs.m
                 L = xs.L
                 z = la.solve(L, (x - μ))
                 ρ[j] = np.dot(z, z)
-            π = 1 / np.sum(ρ < threshold)
+            π = 1 / np.sum(ρ < self.threshold)
             if self.rng.rand() < π:
                 return x
 
@@ -143,6 +145,7 @@ class MoE(BaseMixture):
         ps = np.array([c.eval(x, ii, log) for c in self.xs]).T
         ps *= 0
         ps += 1.
+        ps = ps.squeeze()
 
         if log:
             return np.log(ps)
