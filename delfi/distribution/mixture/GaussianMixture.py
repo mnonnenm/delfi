@@ -5,6 +5,7 @@ import scipy.stats
 from delfi.distribution.Gaussian import Gaussian
 from delfi.distribution.mixture.BaseMixture import BaseMixture
 from delfi.distribution.mixture.StudentsTMixture import MoT
+from delfi.distribution.mixture.EllipsoidalMixture import MoE
 
 
 class MoG(BaseMixture):
@@ -181,6 +182,11 @@ class MoG(BaseMixture):
             dofs = [dofs for i in range(len(self.xs))]
         ys = [x.convert_to_T(dof) for x, dof in zip(self.xs, dofs)]
         return MoT(self.a, xs=ys, seed=self.seed)
+
+    def convert_to_E(self, beta=0.99):
+        """Convert to Mixture of ellipsoidal distributions
+        """
+        return MoE(self.a, xs=self.xs, seed=self.seed, beta=beta)
 
     @copy_ancestor_docstring
     def eval(self, x, ii=None, log=True):
