@@ -230,52 +230,68 @@ class NeuralNet(object):
         """Compiles theano functions"""
         self._f_eval_comps = theano.function(
             inputs=[self.stats],
-            outputs=self.dcomps)
+            outputs=self.comps)
         self._f_eval_lprobs = theano.function(
+            inputs=[self.params, self.stats],
+            outputs=self.lprobs)
+        self._f_eval_dcomps = theano.function(
+            inputs=[self.stats],
+            outputs=self.dcomps)
+        self._f_eval_dlprobs = theano.function(
             inputs=[self.params, self.stats],
             outputs=self.dlprobs)
 
-    def eval_comps(self, stats):
+    def eval_comps(self, stats, deterministic=True):
         """Evaluate the parameters of all mixture components at given inputs
 
         Parameters
         ----------
         stats : np.array
             rows are input locations
+        deterministic : bool
+            if True, mean weights are used for Bayesian network
 
         Returns
         -------
         mixing coefficients, means and scale matrices
         """
-        return self._f_eval_comps(stats.astype(dtype))
+        if deterministic:
+            return self._f_eval_dcomps(stats.astype(dtype))
+        else:
+            return self._f_eval_comps(stats.astype(dtype))
 
-    def eval_lprobs(self, params, stats):
+    def eval_lprobs(self, params, stats, deterministic=True):
         """Evaluate log probabilities for given input-output pairs.
 
         Parameters
         ----------
         params : np.array
         stats : np.array
+        deterministic : bool
+            if True, mean weights are used for Bayesian network
 
         Returns
         -------
         log probabilities : log p(params|stats)
         """
-        return self._f_eval_lprobs(params.astype(dtype), stats.astype(dtype))
+        if deterministic:
+            return self._f_eval_dlprobs(params.astype(dtype), stats.astype(dtype))
+        else:
+            return self._f_eval_lprobs(params.astype(dtype), stats.astype(dtype))
 
-    def get_mog(self, stats, n_samples=None):
+    def get_mog(self, stats, deterministic=True):
         """Return the conditional MoG at location x
 
         Parameters
         ----------
         stats : np.array
             single input location
-        n_samples : None or int
-            ...
+        deterministic : bool
+            if True, mean weights are used for Bayesian network
         """
         assert stats.shape[0] == 1, 'x.shape[0] needs to be 1'
 
-        comps = self.eval_comps(stats)
+        comps = self.eval_comps(stats, deterministic)
         a = comps['a'][0]
         ms = [comps['m' + str(i)][0] for i in range(self.n_components)]
         Us = [comps['U' + str(i)][0] for i in range(self.n_components)]

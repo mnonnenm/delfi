@@ -122,16 +122,18 @@ class BaseInference(metaclass=ABCMetaDoc):
         self.stats_mean = np.nanmean(stats, axis=0)
         self.stats_std = np.nanstd(stats, axis=0)
 
-    def predict(self, x):
+    def predict(self, x, deterministic=True):
         """Predict posterior given x
 
         Parameters
         ----------
         x : array
             Stats for which to compute the posterior
+        deterministic : bool
+            if True, mean weights are used for Bayesian network
         """
         x_zt = (x - self.stats_mean) / self.stats_std
-        posterior = self.network.get_mog(x_zt, n_samples=None)
+        posterior = self.network.get_mog(x_zt, deterministic=n_samples)
         return posterior.ztrans_inv(self.params_mean, self.params_std)
 
     def compile_observables(self):
