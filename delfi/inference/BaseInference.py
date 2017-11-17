@@ -133,7 +133,7 @@ class BaseInference(metaclass=ABCMetaDoc):
             if True, mean weights are used for Bayesian network
         """
         x_zt = (x - self.stats_mean) / self.stats_std
-        posterior = self.network.get_mog(x_zt, deterministic=n_samples)
+        posterior = self.network.get_mog(x_zt, deterministic=deterministic)
         return posterior.ztrans_inv(self.params_mean, self.params_std)
 
     def compile_observables(self):
