@@ -21,8 +21,6 @@ class StudentsT(BaseDistribution):
         """
         m = np.asarray(m)
         self.m = m
-        super().__init__(ndim=m.size, seed=seed)
-
         self.dof = dof
         assert(dof > 0)
 
@@ -32,6 +30,7 @@ class StudentsT(BaseDistribution):
         self.S = S
         self.Pm = np.dot(self.P, m)
         self.logdetP = -2.0 * np.sum(np.log(np.diagonal(self.C)))
+        super().__init__(ndim=m.size, seed=seed)
 
     @property
     def mean(self):
@@ -63,7 +62,7 @@ class StudentsT(BaseDistribution):
     @copy_ancestor_docstring
     def gen(self, n_samples=1):
         # See BaseDistribution.py for docstring
-        u = np.random.chisquare(self.dof, n_samples) / self.dof
-        y = np.random.multivariate_normal(np.zeros(self.ndim),
+        u = self.rng.chisquare(self.dof, n_samples) / self.dof
+        y = self.rng.multivariate_normal(np.zeros(self.ndim),
                                           self.S, (n_samples,))
         return self.m + y / np.sqrt(u)[:, None]
