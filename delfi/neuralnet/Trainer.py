@@ -63,7 +63,7 @@ class Trainer:
         self.lr = lr
         self.lr_decay = lr_decay
         self.lr_op = theano.shared(np.array(self.lr, dtype=dtype))
-        self.updates = step(grads, self.network.aps, learning_rate=self.lr_op)
+        self.updates = step(grads, self.network.aps, learning_rate=self.lr)
 
         # check trn_data
         n_trn_data_list = set([x.shape[0] for x in trn_data])
@@ -73,7 +73,7 @@ class Trainer:
         # outputs
         self.trn_outputs_names = ['loss']
         self.trn_outputs_nodes = [self.loss]
-        if monitor is not None and len(monitor) > 0:
+        if monitor is not None:
             monitor_names, monitor_nodes = zip(*monitor.items())
             self.trn_outputs_names += monitor_names
             self.trn_outputs_nodes += monitor_nodes
@@ -89,7 +89,7 @@ class Trainer:
         self.loss = float('inf')
 
     def train(self,
-              epochs=250,
+              epochs=100,
               minibatch=50,
               monitor_every=None,
               stop_on_nan=False,

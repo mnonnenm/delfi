@@ -12,9 +12,6 @@ from delfi.utils.odict import first, last, nth
 
 dtype = theano.config.floatX
 
-def MyLogSumExp(x, axis=None):
-    x_max = tt.max(x, axis=axis, keepdims=True)
-    return tt.log(tt.sum(tt.exp(x - x_max), axis=axis, keepdims=True)) + x_max
 
 class NeuralNet(object):
     def __init__(self, n_inputs, n_outputs, n_components=1, n_filters=[],
@@ -85,8 +82,6 @@ class NeuralNet(object):
             self.stats = tt.tensor3('stats', dtype=dtype)
         elif len(self.n_inputs)+1 == 4:
             self.stats = tt.tensor4('stats', dtype=dtype)
-        else:
-            raise NotImplementedError
 
         # input layer
         self.layer['input'] = ll.InputLayer(
@@ -97,8 +92,7 @@ class NeuralNet(object):
             self.layer['missing'] = dl.ImputeMissingLayer(last(self.layer),
                                                           n_inputs=self.n_inputs)
         else:
-            self.layer['missing'] = dl.ReplaceMissingLayer(last(self.layer),
-                                                           n_inputs=self.n_inputs)
+            self.layer['missing'] = dl.ReplaceMissingLayer(last(self.layer))
 
         # recurrent neural net
         # expects shape (batch, sequence_length, num_inputs)
@@ -138,6 +132,28 @@ class NeuralNet(object):
                     nonlinearity=lnl.rectify,
                     flip_filters=True,
                     convolution=tt.nnet.conv2d)
+
+#                self.layer['conv_' + str(l + 1)] = ll.Conv2DLayer(
+#                    name='c' + str(l + 1),
+#                    incoming=last(self.layer),
+#                    num_filters=n_filters[l],
+#                    filter_size=3,
+#                    stride=(1, 1),
+#                    pad=0,
+#                    untie_biases=False,
+#                    W=lasagne.init.GlorotUniform(),
+#                    b=lasagne.init.Constant(0.),
+#                    nonlinearity=lnl.rectify,
+#                    flip_filters=True,
+#                    convolution=tt.nnet.conv2d)
+
+#                self.layer['pool_' + str(l + 1)] = ll.MaxPool2DLayer(
+#                    name='c' + str(l + 1),
+#                    incoming=last(self.layer),
+#                    pool_size=(2,2), 
+#                    stride=None, 
+#                    pad=(0, 0), 
+#                    ignore_border=True)                  
 
         # flatten
         self.layer['flatten'] = ll.FlattenLayer(
@@ -192,8 +208,9 @@ class NeuralNet(object):
         self.lprobs_comps = [-0.5 * tt.sum(tt.sum((self.params - m).dimshuffle(
             [0, 'x', 1]) * U, axis=2)**2, axis=1) + ldetU
             for m, U, ldetU in zip(self.ms, self.Us, self.ldetUs)]
-        self.lprobs = (MyLogSumExp(tt.stack(self.lprobs_comps, axis=1) + tt.log(self.a), axis=1) \
-                      - (0.5 * self.n_outputs * np.log(2 * np.pi))).squeeze()
+        self.lprobs = tt.log(tt.sum(tt.exp(tt.stack(self.lprobs_comps,
+                                                    axis=1) + tt.log(self.a)),
+                                    axis=1)) - (0.5 * self.n_outputs * np.log(2 * np.pi))
 
         # the quantities from above again, but with deterministic=True
         # --- in the svi case, this will disable injection of randomness;
@@ -209,8 +226,9 @@ class NeuralNet(object):
         self.dlprobs_comps = [-0.5 * tt.sum(tt.sum((self.params - m).dimshuffle(
             [0, 'x', 1]) * U, axis=2)**2, axis=1) + ldetU
             for m, U, ldetU in zip(self.dms, self.dUs, self.dldetUs)]
-        self.dlprobs = (MyLogSumExp(tt.stack(self.dlprobs_comps, axis=1) + tt.log(self.da), axis=1) \
-                       - (0.5 * self.n_outputs * np.log(2 * np.pi))).squeeze()
+        self.dlprobs = tt.log(tt.sum(tt.exp(tt.stack(self.dlprobs_comps,
+                                                     axis=1) + tt.log(self.da)),
+                                     axis=1)) - (0.5 * self.n_outputs * np.log(2 * np.pi))
 
         # parameters of network
         self.aps = ll.get_all_params(last_mog)  # all parameters
@@ -230,68 +248,52 @@ class NeuralNet(object):
         """Compiles theano functions"""
         self._f_eval_comps = theano.function(
             inputs=[self.stats],
-            outputs=self.comps)
-        self._f_eval_lprobs = theano.function(
-            inputs=[self.params, self.stats],
-            outputs=self.lprobs)
-        self._f_eval_dcomps = theano.function(
-            inputs=[self.stats],
             outputs=self.dcomps)
-        self._f_eval_dlprobs = theano.function(
+        self._f_eval_lprobs = theano.function(
             inputs=[self.params, self.stats],
             outputs=self.dlprobs)
 
-    def eval_comps(self, stats, deterministic=True):
+    def eval_comps(self, stats):
         """Evaluate the parameters of all mixture components at given inputs
 
         Parameters
         ----------
         stats : np.array
             rows are input locations
-        deterministic : bool
-            if True, mean weights are used for Bayesian network
 
         Returns
         -------
         mixing coefficients, means and scale matrices
         """
-        if deterministic:
-            return self._f_eval_dcomps(stats.astype(dtype))
-        else:
-            return self._f_eval_comps(stats.astype(dtype))
+        return self._f_eval_comps(stats.astype(dtype))
 
-    def eval_lprobs(self, params, stats, deterministic=True):
+    def eval_lprobs(self, params, stats):
         """Evaluate log probabilities for given input-output pairs.
 
         Parameters
         ----------
         params : np.array
         stats : np.array
-        deterministic : bool
-            if True, mean weights are used for Bayesian network
 
         Returns
         -------
         log probabilities : log p(params|stats)
         """
-        if deterministic:
-            return self._f_eval_dlprobs(params.astype(dtype), stats.astype(dtype))
-        else:
-            return self._f_eval_lprobs(params.astype(dtype), stats.astype(dtype))
+        return self._f_eval_lprobs(params.astype(dtype), stats.astype(dtype))
 
-    def get_mog(self, stats, deterministic=True):
+    def get_mog(self, stats, n_samples=None):
         """Return the conditional MoG at location x
 
         Parameters
         ----------
         stats : np.array
             single input location
-        deterministic : bool
-            if True, mean weights are used for Bayesian network
+        n_samples : None or int
+            ...
         """
         assert stats.shape[0] == 1, 'x.shape[0] needs to be 1'
 
-        comps = self.eval_comps(stats, deterministic)
+        comps = self.eval_comps(stats)
         a = comps['a'][0]
         ms = [comps['m' + str(i)][0] for i in range(self.n_components)]
         Us = [comps['U' + str(i)][0] for i in range(self.n_components)]
