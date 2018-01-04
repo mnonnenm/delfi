@@ -5,6 +5,7 @@ import theano.tensor as tt
 from delfi.inference.BaseInference import BaseInference
 from delfi.neuralnet.Trainer import Trainer
 from delfi.neuralnet.loss.regularizer import svi_kl_init, svi_kl_zero
+from delfi.kernel.Kernel_learning import kernel_opt
 
 dtype = theano.config.floatX
 
@@ -99,7 +100,7 @@ class SNPE(BaseInference):
         return loss
 
     def run(self, n_train=100, n_rounds=2, epochs=100, minibatch=50,
-            round_cl=1, stop_on_nan=False, monitor=None, **kwargs):
+            round_cl=1, stop_on_nan=False, monitor=None, kernel_loss=None, **kwargs):
         """Run algorithm
 
         Parameters
@@ -180,7 +181,14 @@ class SNPE(BaseInference):
                 iws *= p_prior / p_proposal
 
             # normalize weights
-            iws = (iws/np.sum(iws))*n_train_round
+            #iws = (iws/np.sum(iws))*n_train_round
+
+            # train calibration kernel (learns own normalization)
+            cbkrnl= kernel_opt(iws=iws.astype(np.float32), 
+                            stats=trn_data[1], obs=self.obs, 
+                            kernel_loss=kernel_loss, n_steps=5000)
+            iws *= cbkrnl.eval(trn_data[1])
+
 
             trn_data = (trn_data[0], trn_data[1], iws)
             trn_inputs = [self.network.params, self.network.stats,
