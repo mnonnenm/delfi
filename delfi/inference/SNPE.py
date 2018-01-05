@@ -180,15 +180,16 @@ class SNPE(BaseInference):
                 p_proposal = self.generator.proposal.eval(params, log=False)
                 iws *= p_prior / p_proposal
 
-            # normalize weights
-            #iws = (iws/np.sum(iws))*n_train_round
 
             # train calibration kernel (learns own normalization)
-            cbkrnl= kernel_opt(iws=iws.astype(np.float32), 
-                            stats=trn_data[1], obs=self.obs, 
-                            kernel_loss=kernel_loss, n_steps=5000)
-            iws *= cbkrnl.eval(trn_data[1])
+            if not kernel_loss is None:
+                cbkrnl= kernel_opt(iws=iws.astype(np.float32), 
+                                stats=trn_data[1], obs=self.obs, 
+                                kernel_loss=kernel_loss, n_steps=5000)
+                iws *= cbkrnl.eval(trn_data[1])
 
+            # normalize weights
+            iws = (iws/np.sum(iws))*n_train_round
 
             trn_data = (trn_data[0], trn_data[1], iws)
             trn_inputs = [self.network.params, self.network.stats,
