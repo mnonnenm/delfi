@@ -142,4 +142,4 @@ def kernel_opt(iws, stats, obs, kernel_loss='x_kl', n_steps=10000):
 
     cbkrnl = My_Helper_Kernel(obs=obs, A=A, Z=Z)
 
-    return cbkrnl
+    return cbkrnl, train_errs

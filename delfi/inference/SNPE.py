@@ -174,19 +174,23 @@ class SNPE(BaseInference):
 
             # precompute importance weights
             iws = np.ones((n_train_round,))
+
+            cbkrnl, cbl = None, None
             if self.generator.proposal is not None:
                 params = self.params_std * trn_data[0] + self.params_mean
                 p_prior = self.generator.prior.eval(params, log=False)
                 p_proposal = self.generator.proposal.eval(params, log=False)
                 iws *= p_prior / p_proposal
 
-
-            # train calibration kernel (learns own normalization)
-            if not kernel_loss is None:
-                cbkrnl= kernel_opt(iws=iws.astype(np.float32), 
-                                stats=trn_data[1], obs=self.obs, 
-                                kernel_loss=kernel_loss, n_steps=5000)
-                iws *= cbkrnl.eval(trn_data[1])
+                # train calibration kernel (learns own normalization)
+                if not kernel_loss is None:
+                    print('fitting calibration kernel ...')
+                    cbkrnl, cbl = kernel_opt(iws=iws.astype(np.float32), 
+                                    stats=trn_data[1].reshape(n_train_round,-1), 
+                                    obs=self.obs.reshape(1,-1), 
+                                    kernel_loss=kernel_loss, n_steps=5000)
+                    print('done.')
+                    iws *= cbkrnl.eval(trn_data[1].reshape(n_train_round,-1))
 
             # normalize weights
             iws = (iws/np.sum(iws))*n_train_round
@@ -204,8 +208,16 @@ class SNPE(BaseInference):
             logs.append(t.train(epochs=epochs, minibatch=minibatch,
                                 verbose=verbose, stop_on_nan=stop_on_nan))
 
+            logs[-1]['cbkrnl'] = cbkrnl
+            logs[-1]['cbk_loss'] = cbl
+
             trn_datasets.append(trn_data)
 
-            posteriors.append(self.predict(self.obs))
+            try:
+                posteriors.append(self.predict(self.obs))
+            except:
+                posteriors.append(None)
+                print('analytic correction for proposal seemingly failed!')
+                break
 
         return logs, trn_datasets, posteriors
