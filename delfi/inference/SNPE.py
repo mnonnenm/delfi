@@ -184,12 +184,21 @@ class SNPE(BaseInference):
 
                 # train calibration kernel (learns own normalization)
                 if not kernel_loss is None:
-                    print('fitting calibration kernel ...')
-                    cbkrnl, cbl = kernel_opt(iws=iws.astype(np.float32), 
-                                    stats=trn_data[1].reshape(n_train_round,-1), 
-                                    obs=self.obs.reshape(1,-1), 
-                                    kernel_loss=kernel_loss, n_steps=5000)
-                    print('done.')
+                    if verbose:
+                        print('fitting calibration kernel ...')
+                    cbkrnl, cbl = kernel_opt(
+                        iws=iws.astype(np.float32), 
+                        stats=trn_data[1].reshape(n_train_round,-1),
+                        obs=self.obs.reshape(1,-1), 
+                        kernel_loss=kernel_loss, 
+                        epochs=epochs, 
+                        minibatch=minibatch, 
+                        stop_on_nan=stop_on_nan,
+                        seed=self.gen_newseed(), 
+                        monitor=self.monitor_dict_from_names(monitor),
+                        **kwargs)
+                    if verbose: 
+                        print('done.')
                     iws *= cbkrnl.eval(trn_data[1].reshape(n_train_round,-1))
 
             # normalize weights

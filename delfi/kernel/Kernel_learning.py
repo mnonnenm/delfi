@@ -2,10 +2,11 @@ import lasagne
 import numpy as np
 import theano
 import theano.tensor as T
+import lasagne.updates as lu
 
 import abc
 from delfi.utils.meta import ABCMetaDoc
-
+from delfi.neuralnet.Trainer import Trainer
 
 class KernelLayer(lasagne.layers.Layer):
     def __init__(self, incoming, B=lasagne.init.Normal(0.01), **kwargs):
@@ -70,7 +71,6 @@ class My_Helper_Kernel(metaclass=ABCMetaDoc):
         else:
             raise NotImplementedError
 
-
     @abc.abstractmethod
     def kernel(u):
         pass        
@@ -99,22 +99,26 @@ class My_Helper_Kernel(metaclass=ABCMetaDoc):
 
         return out
 
+def kernel_opt(iws, stats, obs, kernel_loss=None, step=lu.adam,
+               epochs=100, minibatch=100, lr=0.001, lr_decay=1.0, 
+               max_norm=0.1, monitor=None, monitor_every=None, 
+               stop_on_nan=False, verbose=False, seed=None):
 
-def kernel_opt(iws, stats, obs, kernel_loss='x_kl', n_steps=10000):
+    assert kernel_loss in (None, 'x_kl', 'ess')
 
     dtype = theano.config.floatX
-    input_var = T.fmatrix('inputs')
-    target_var = T.fvector('targets')
+    input_var = T.matrix('inputs', dtype=dtype)
+    target_var = T.vector('targets', dtype=dtype)
+
+    dx = (stats - obs).astype(np.float32)
 
     # set up learning model 
-    l_in = lasagne.layers.InputLayer(shape=(None, obs.size),input_var=input_var)
+    l_in = lasagne.layers.InputLayer(shape=(None,obs.size),input_var=input_var)
     l_dot = KernelLayer_offset(l_in, name='kernel_layer')
     prediction = lasagne.layers.get_output(l_dot)
     w_opt = prediction * target_var
     
-    if kernel_loss == 'basic':
-        loss = T.mean((1 - w_opt)**2)
-    elif kernel_loss == 'ess':
+    if kernel_loss == 'ess':
         loss =  - T.sum(w_opt)**2 / (T.sum(w_opt**2))
     elif kernel_loss == 'x_kl':
         loss = T.log( T.mean(w_opt) ) - T.mean(T.log(prediction))        
@@ -124,22 +128,30 @@ def kernel_opt(iws, stats, obs, kernel_loss='x_kl', n_steps=10000):
         raise NotImplementedError
     
     params_k = lasagne.layers.get_all_params(l_dot, trainable=True)
-    updates = lasagne.updates.adam(
-                loss, params_k, learning_rate=0.001)
-    train_fn = theano.function([input_var, target_var], [loss, prediction], updates=updates,
-                                on_unused_input='ignore')
 
-    # fit kernel
-    train_errs = np.zeros(n_steps)
-    dx = (stats - obs).astype(np.float32)
-    for i in range(train_errs.size):
-        train_errs[i], kx = train_fn(dx, iws)
+    class Kernel(object):
+        def __init__(self, params):
+            self.aps = params            
 
-    B = l_dot.B.get_value()
+    krnl = Kernel(params_k)                   # this is dumb
+
+    trnr = Trainer(krnl, loss, 
+                   trn_data=(dx, iws), 
+                   trn_inputs=[input_var, target_var],
+                   step=step, lr=lr, lr_decay=lr_decay, max_norm=None,
+                   monitor=monitor, seed=seed)
+
+    logs = trnr.train(epochs=epochs,
+               minibatch=minibatch,
+               monitor_every=monitor_every,
+               stop_on_nan=stop_on_nan,
+               verbose=verbose)    
+
+    B = krnl.aps[0].get_value()
     A = B*B if B.ndim==1 else B.dot(B.T)
 
-    Z = l_dot.Z.get_value()
+    Z = krnl.aps[1].get_value()
 
     cbkrnl = My_Helper_Kernel(obs=obs, A=A, Z=Z)
 
-    return cbkrnl, train_errs
+    return cbkrnl, logs['loss']
