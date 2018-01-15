@@ -102,7 +102,8 @@ class My_Helper_Kernel(metaclass=ABCMetaDoc):
 def kernel_opt(iws, stats, obs, kernel_loss=None, step=lu.adam,
                epochs=100, minibatch=100, lr=0.001, lr_decay=1.0, 
                max_norm=0.1, monitor=None, monitor_every=None, 
-               stop_on_nan=False, verbose=False, seed=None):
+               stop_on_nan=False, verbose=False, 
+               stat_features=None, seed=None):
 
     assert kernel_loss in (None, 'x_kl', 'ess')
 
@@ -110,7 +111,10 @@ def kernel_opt(iws, stats, obs, kernel_loss=None, step=lu.adam,
     input_var = T.matrix('inputs', dtype=dtype)
     target_var = T.vector('targets', dtype=dtype)
 
-    dx = (stats - obs).astype(np.float32)
+    if stat_features is None: 
+        dx = (stats - obs).astype(np.float32)
+    else:
+        dx = (stat_features(stats) - stat_features(obs)).astype(np.float32)
 
     # set up learning model 
     l_in = lasagne.layers.InputLayer(shape=(None,obs.size),input_var=input_var)
