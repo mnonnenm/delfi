@@ -186,10 +186,20 @@ class SNPE(BaseInference):
                 if not kernel_loss is None:
                     if verbose:
                         print('fitting calibration kernel ...')
+
+                    #ks = list(self.network.layer.keys())
+                    #hiddens = np.where([i[:6]=='hidden' for i in ks])[0]
+                    #layer_index = hiddens[-1] # pick last hidden layer
+                    #hl = network.layer[ks[layer_index]]
+                    #stat_features = theano.function(
+                    #    inputs=[network.stats],
+                    #    outputs=ll.get_output(hl))
+
+                    obs_z = (self.obs - self.stats_mean) / self.stats_std
                     cbkrnl, cbl = kernel_opt(
                         iws=iws.astype(np.float32), 
                         stats=trn_data[1].reshape(n_train_round,-1),
-                        obs=self.obs.reshape(1,-1), 
+                        obs=obs_z.reshape(1,-1), 
                         kernel_loss=kernel_loss, 
                         epochs=epochs, 
                         minibatch=minibatch, 
