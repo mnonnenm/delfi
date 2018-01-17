@@ -7,6 +7,8 @@ from delfi.neuralnet.Trainer import Trainer
 from delfi.neuralnet.loss.regularizer import svi_kl_init, svi_kl_zero
 from delfi.kernel.Kernel_learning import kernel_opt
 
+import lasagne.layers as ll
+
 dtype = theano.config.floatX
 
 
@@ -100,7 +102,8 @@ class SNPE(BaseInference):
         return loss
 
     def run(self, n_train=100, n_rounds=2, epochs=100, minibatch=50,
-            round_cl=1, stop_on_nan=False, monitor=None, kernel_loss=None, **kwargs):
+            round_cl=1, stop_on_nan=False, monitor=None, kernel_loss=None, 
+            epochs_cbk=None, minibatch_cbk=None, **kwargs):
         """Run algorithm
 
         Parameters
@@ -139,6 +142,9 @@ class SNPE(BaseInference):
         logs = []
         trn_datasets = []
         posteriors = []
+
+        epochs_cbk = epochs if epochs_cbk is None else epochs_cbk
+        minibatch_cbk = minibatch if minibatch_cbk is None else minibatch_cbk
 
         for r in range(n_rounds):
             self.round += 1
@@ -187,29 +193,34 @@ class SNPE(BaseInference):
                     if verbose:
                         print('fitting calibration kernel ...')
 
-                    #ks = list(self.network.layer.keys())
-                    #hiddens = np.where([i[:6]=='hidden' for i in ks])[0]
-                    #layer_index = hiddens[-1] # pick last hidden layer
-                    #hl = network.layer[ks[layer_index]]
-                    #stat_features = theano.function(
-                    #    inputs=[network.stats],
-                    #    outputs=ll.get_output(hl))
+                    ks = list(self.network.layer.keys())
+                    hiddens = np.where([i[:6]=='hidden' for i in ks])[0]
+                    layer_index = 0 #hiddens[-1] # pick last hidden layer
+                    hl = self.network.layer[ks[layer_index]]
 
+                    stat_features = theano.function(
+                        inputs=[self.network.stats],
+                        outputs=ll.get_output(hl))
+
+                    fstats = stat_features(trn_data[1].reshape(n_train_round,-1))
                     obs_z = (self.obs - self.stats_mean) / self.stats_std
+                    fobs_z = stat_features(obs_z)
+
                     cbkrnl, cbl = kernel_opt(
                         iws=iws.astype(np.float32), 
-                        stats=trn_data[1].reshape(n_train_round,-1),
-                        obs=obs_z.reshape(1,-1), 
+                        stats=fstats,
+                        obs=fobs_z, 
                         kernel_loss=kernel_loss, 
-                        epochs=epochs, 
-                        minibatch=minibatch, 
+                        epochs=epochs_cbk, #epochs 
+                        minibatch=minibatch_cbk, #minibatch, 
                         stop_on_nan=stop_on_nan,
                         seed=self.gen_newseed(), 
                         monitor=self.monitor_dict_from_names(monitor),
                         **kwargs)
                     if verbose: 
                         print('done.')
-                    iws *= cbkrnl.eval(trn_data[1].reshape(n_train_round,-1))
+
+                    iws *= cbkrnl.eval(fstats)
 
             # normalize weights
             iws = (iws/np.sum(iws))*n_train_round
