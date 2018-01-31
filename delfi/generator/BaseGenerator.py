@@ -6,7 +6,11 @@ from delfi.utils.progress import no_tqdm, progressbar
 
 
 class BaseGenerator(metaclass=ABCMetaDoc):
+<<<<<<< HEAD
     def __init__(self, model, prior, summary):
+=======
+    def __init__(self, model, prior, summary, seed=None):
+>>>>>>> upstream/master
         """Generator
 
         Parameters
@@ -30,6 +34,7 @@ class BaseGenerator(metaclass=ABCMetaDoc):
         self.summary = summary
         self.proposal = None
 
+<<<<<<< HEAD
     def gen(self, n_samples, n_reps=1, skip_feedback=False, verbose=True):
         """Draw parameters and run forward model
 
@@ -54,6 +59,11 @@ class BaseGenerator(metaclass=ABCMetaDoc):
         """
         assert n_reps == 1, 'n_reps > 1 is not yet supported'
 
+=======
+        self.rng = np.random.RandomState(seed=seed)
+
+    def draw_params(self, n_samples, skip_feedback=False, prior_mixin=0, verbose=True):
+>>>>>>> upstream/master
         if not verbose:
             pbar = no_tqdm()
         else:
@@ -69,7 +79,11 @@ class BaseGenerator(metaclass=ABCMetaDoc):
             i = 0
             while i < n_samples:
                 # sample parameter
+<<<<<<< HEAD
                 if self.proposal is None:
+=======
+                if self.proposal is None or self.rng.random_sample() < prior_mixin:
+>>>>>>> upstream/master
                     proposed_param = self.prior.gen(n_samples=1)  # dim params,
                 else:
                     proposed_param = self.proposal.gen(n_samples=1)
@@ -87,13 +101,97 @@ class BaseGenerator(metaclass=ABCMetaDoc):
                 else:
                     raise ValueError('response not supported')
 
+<<<<<<< HEAD
         # run forward model for all params, each n_reps times
         result = self.model.gen(params, n_reps=n_reps, verbose=verbose)
+=======
+            return params
+
+    def iterate_minibatches(self, params, minibatch=50):
+        n_samples = len(params)
+
+        for i in range(0, n_samples - minibatch+1, minibatch):
+            yield params[i:i + minibatch]
+
+        rem_i = n_samples - (n_samples % minibatch)
+        if rem_i != n_samples:
+            yield params[rem_i:]    
+
+    def gen(self, n_samples, n_reps=1, skip_feedback=False, prior_mixin=0, minibatch=50, keep_data=True, verbose=True):
+        """Draw parameters and run forward model
+
+        Parameters
+        ----------
+        n_samples : int
+            Number of samples
+        n_reps: int
+            Number of repetitions per parameter sample
+        skip_feedback: bool
+            If True, feedback checks on params, data and sum stats are skipped
+        verbose : bool or str
+            If False, will not display progress bars. If a string is passed,
+            it will be appended to the description of the progress bar.
+
+        Returns
+        -------
+        params : n_samples x n_reps x n_params
+            Parameters
+        stats : n_samples x n_reps x n_summary
+            Summary statistics of data
+        """
+        assert n_reps == 1, 'n_reps > 1 is not yet supported'
+
+        params = self.draw_params(n_samples=n_samples,
+                                  skip_feedback=skip_feedback, 
+                                  prior_mixin=prior_mixin,
+                                  verbose = verbose)
+
+        # Run forward model for params (in batches)
+        if not verbose:
+            pbar = no_tqdm()
+        else:
+            pbar = progressbar(total=len(params))
+            desc = 'Run simulations '
+            if type(verbose) == str:
+                desc += verbose
+            pbar.set_description(desc)
+
+        final_params = []
+        final_stats = []  # list of summary stats
+        with pbar:
+            for params_batch in self.iterate_minibatches(params, minibatch):
+                # run forward model for all params, each n_reps times
+                result = self.model.gen(params_batch, n_reps=n_reps, pbar=pbar)
+
+                stats, params = self.process_batch(params_batch, result)
+                final_params += params
+                final_stats += stats
+
+        # TODO: for n_reps > 1 duplicate params; reshape stats array
+
+        # n_samples x n_reps x dim theta
+        params = np.array(final_params)
+
+        # n_samples x n_reps x dim summary stats
+        stats = np.array(final_stats)
+        stats = stats.squeeze(axis=1)
+
+        return params, stats
+
+    def process_batch(self, params_batch, result):
+        ret_stats = []
+        ret_params = []
+>>>>>>> upstream/master
 
         # for every datum in data, check validity
         params_data_valid = []  # list of params with valid data
         data_valid = []  # list of lists containing n_reps dicts with data
+<<<<<<< HEAD
         for param, datum in zip(params, result):
+=======
+
+        for param, datum in zip(params_batch, result):
+>>>>>>> upstream/master
             # check validity
             response = self._feedback_forward_model(datum)
             if response == 'accept' or skip_feedback:
@@ -106,8 +204,11 @@ class BaseGenerator(metaclass=ABCMetaDoc):
                 raise ValueError('response not supported')
 
         # for every data in data, calculate summary stats
+<<<<<<< HEAD
         final_params = []
         final_stats = []  # list of summary stats
+=======
+>>>>>>> upstream/master
         for param, datum in zip(params_data_valid, data_valid):
             # calculate summary statistics
             sum_stats = self.summary.calc(datum)  # n_reps x dim stats
@@ -115,14 +216,21 @@ class BaseGenerator(metaclass=ABCMetaDoc):
             # check validity
             response = self._feedback_summary_stats(sum_stats)
             if response == 'accept' or skip_feedback:
+<<<<<<< HEAD
                 final_stats.append(sum_stats)
                 # if sum stats is accepted, accept the param as well
                 final_params.append(param)
+=======
+                ret_stats.append(sum_stats)
+                # if sum stats is accepted, accept the param as well
+                ret_params.append(param)
+>>>>>>> upstream/master
             elif response == 'discard':
                 continue
             else:
                 raise ValueError('response not supported')
 
+<<<<<<< HEAD
         # TODO: for n_reps > 1 duplicate params; reshape stats array
 
         # n_samples x n_reps x dim theta
@@ -133,6 +241,9 @@ class BaseGenerator(metaclass=ABCMetaDoc):
         stats = stats.squeeze(axis=1)
 
         return params, stats
+=======
+        return ret_stats, ret_params
+>>>>>>> upstream/master
 
     @abc.abstractmethod
     def _feedback_proposed_param(self, param):
