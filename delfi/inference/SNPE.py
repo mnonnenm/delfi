@@ -103,7 +103,8 @@ class SNPE(BaseInference):
 
     def run(self, n_train=100, n_rounds=2, epochs=100, minibatch=50,
             round_cl=1, stop_on_nan=False, monitor=None, kernel_loss=None, 
-            epochs_cbk=None, minibatch_cbk=None, **kwargs):
+            epochs_cbk=None, minibatch_cbk=None, cbk_feature_layer=0, 
+            trn_acc=False, **kwargs):
         """Run algorithm
 
         Parameters
@@ -125,6 +126,13 @@ class SNPE(BaseInference):
             possible variables that can be monitored
         round_cl : int
             Round after which to start continual learning
+        kernel_loss: str
+            String specifying the loss used for calibration kernel training. 
+            Currently implemented are 'x_kl', 'mESS'. None for no kernel
+        epochs_cbk: int
+            Number of epochs used for calibration kernel training
+        minibatch_cbk: int
+            Size of the minibatches used for kernel training
         stop_on_nan : bool
             If True, will halt if NaNs in the loss are encountered
         kwargs : additional keyword arguments
@@ -145,6 +153,7 @@ class SNPE(BaseInference):
 
         epochs_cbk = epochs if epochs_cbk is None else epochs_cbk
         minibatch_cbk = minibatch if minibatch_cbk is None else minibatch_cbk
+
 
         for r in range(n_rounds):
             self.round += 1
@@ -172,6 +181,7 @@ class SNPE(BaseInference):
                     n_train_round = n_train[-1]
             else:
                 n_train_round = n_train
+            n_grad_steps = int(n_train_round/minibatch*epochs)
 
             # draw training data (z-transformed params and stats)
             verbose = '(round {}) '.format(self.round) if self.verbose else False
@@ -190,19 +200,20 @@ class SNPE(BaseInference):
 
                 # train calibration kernel (learns own normalization)
                 if not kernel_loss is None:
+
+                    #if self.round < round_cl:
                     if verbose:
                         print('fitting calibration kernel ...')
 
                     ks = list(self.network.layer.keys())
-                    hiddens = np.where([i[:6]=='hidden' for i in ks])[0]
-                    layer_index = 0 #hiddens[-1] # pick last hidden layer
+                    layer_index = cbk_feature_layer
                     hl = self.network.layer[ks[layer_index]]
 
                     stat_features = theano.function(
                         inputs=[self.network.stats],
                         outputs=ll.get_output(hl))
 
-                    fstats = stat_features(trn_data[1].reshape(n_train_round,-1))
+                    fstats = stat_features(trn_data[1])
                     obs_z = (self.obs - self.stats_mean) / self.stats_std
                     fobs_z = stat_features(obs_z)
 
@@ -211,8 +222,8 @@ class SNPE(BaseInference):
                         stats=fstats,
                         obs=fobs_z, 
                         kernel_loss=kernel_loss, 
-                        epochs=epochs_cbk, #epochs 
-                        minibatch=minibatch_cbk, #minibatch, 
+                        epochs=epochs_cbk,
+                        minibatch=minibatch_cbk, 
                         stop_on_nan=stop_on_nan,
                         seed=self.gen_newseed(), 
                         monitor=self.monitor_dict_from_names(monitor),
@@ -220,6 +231,33 @@ class SNPE(BaseInference):
                     if verbose: 
                         print('done.')
 
+                if trn_acc: 
+                    trn_data = [np.vstack((trn_data[0], trn_data_all[0])),
+                                np.vstack((trn_data[1], trn_data_all[1]))]
+                    n_train_round = trn_data[0].shape[0]
+                    params = self.params_std * trn_data[0] + self.params_mean
+                    p_prior = self.generator.prior.eval(params, log=False)
+                    p_proposal = self.generator.prior.eval(params, log=False)
+                    for r in range(self.round-1):
+
+                        print('round ', self.round)
+                        print('grabbing past proposals')
+                        proposal = posteriors[r]
+                        if self.convert_to_T is not None:
+                            if type(self.convert_to_T) == int:
+                                dofs = self.convert_to_T
+                            else:
+                                dofs = 10
+                            print('converting to T')
+                            proposal = proposal.convert_to_T(dofs=dofs)
+                        p_proposal += proposal.eval(params, log=False)
+
+                    p_proposal /= self.round # assuming all n_trains the same !!! 
+                    iws = p_prior / p_proposal                
+                    if not kernel_loss is None:
+                        fstats = stat_features(trn_data[1])
+
+                if not kernel_loss is None:
                     iws *= cbkrnl.eval(fstats)
 
             # normalize weights
@@ -229,19 +267,24 @@ class SNPE(BaseInference):
             trn_inputs = [self.network.params, self.network.stats,
                           self.network.iws]
 
+            n_epochs_round = n_grad_steps / (n_train_round/minibatch)
+            n_epochs_round = np.max((1, int(n_epochs_round)))
+
             t = Trainer(self.network,
                         self.loss(N=n_train_round, round_cl=round_cl),
                         trn_data=trn_data, trn_inputs=trn_inputs,
                         seed=self.gen_newseed(),
                         monitor=self.monitor_dict_from_names(monitor),
                         **kwargs)
-            logs.append(t.train(epochs=epochs, minibatch=minibatch,
+            logs.append(t.train(epochs=n_epochs_round, minibatch=minibatch,
                                 verbose=verbose, stop_on_nan=stop_on_nan))
 
             logs[-1]['cbkrnl'] = cbkrnl
             logs[-1]['cbk_loss'] = cbl
 
             trn_datasets.append(trn_data)
+            if trn_acc: 
+                trn_data_all = trn_data
 
             try:
                 posteriors.append(self.predict(self.obs))
@@ -251,3 +294,4 @@ class SNPE(BaseInference):
                 break
 
         return logs, trn_datasets, posteriors
+
