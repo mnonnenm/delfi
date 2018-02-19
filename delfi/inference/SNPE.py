@@ -104,7 +104,7 @@ class SNPE(BaseInference):
     def run(self, n_train=100, n_rounds=2, epochs=100, minibatch=50,
             round_cl=1, stop_on_nan=False, monitor=None, kernel_loss=None, 
             epochs_cbk=None, minibatch_cbk=None, cbk_feature_layer=0, 
-            trn_acc=False, **kwargs):
+            trn_acc=False, ensure_normed=True, **kwargs):
         """Run algorithm
 
         Parameters
@@ -261,7 +261,8 @@ class SNPE(BaseInference):
                     iws *= cbkrnl.eval(fstats)
 
             # normalize weights
-            iws = (iws/np.sum(iws))*n_train_round
+            if ensure_normed:
+                iws = (iws/np.sum(iws))*n_train_round
 
             trn_data = (trn_data[0], trn_data[1], iws)
             trn_inputs = [self.network.params, self.network.stats,
