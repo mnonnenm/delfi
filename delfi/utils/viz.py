@@ -181,13 +181,13 @@ def plot_pdf(pdf1, lims, pdf2=None, gt=None, contours=False, levels=(0.68, 0.95)
         fig, ax = plt.subplots(1, 1, facecolor='white', figsize=figsize)
 
         if samples is not None:
-            ax.hist(samples[i, :], bins=100, normed=True,
+            ax.hist(samples[0, :], bins=100, normed=True,
                     color=col1,
                     edgecolor=col1)
 
         xx = np.linspace(lims[0, 0], lims[0, 1], resolution)
 
-        for pdf, col in zip(pdfs, col):
+        for pdf, col in zip(pdfs, colrs):
             if pdf is not None:
                 pp = pdf.eval(xx[:, np.newaxis], log=False)
                 ax.plot(xx, pp, color=col)
