@@ -181,7 +181,7 @@ def plot_pdf(pdf1, lims, pdf2=None, gt=None, contours=False, levels=(0.68, 0.95)
         fig, ax = plt.subplots(1, 1, facecolor='white', figsize=figsize)
 
         if samples is not None:
-            ax.hist(samples[i, :], bins=100, normed=True,
+            ax.hist(samples[0, :], bins=100, normed=True,
                     color=col1,
                     edgecolor=col1)
 
