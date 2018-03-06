@@ -187,7 +187,7 @@ def plot_pdf(pdf1, lims, pdf2=None, gt=None, contours=False, levels=(0.68, 0.95)
 
         xx = np.linspace(lims[0, 0], lims[0, 1], resolution)
 
-        for pdf, col in zip(pdfs, col):
+        for pdf, col in zip(pdfs, colrs):
             if pdf is not None:
                 pp = pdf.eval(xx[:, np.newaxis], log=False)
                 ax.plot(xx, pp, color=col)
