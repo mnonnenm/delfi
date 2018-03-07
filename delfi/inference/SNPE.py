@@ -143,7 +143,6 @@ class SNPE(BaseInference):
         trn_datasets = []
         posteriors = []
 
-        epochs_cbk = epochs if epochs_cbk is None else epochs_cbk
         minibatch_cbk = minibatch if minibatch_cbk is None else minibatch_cbk
 
         for r in range(n_rounds):
@@ -167,11 +166,21 @@ class SNPE(BaseInference):
             # number of training examples for this round
             if type(n_train) == list:
                 try:
-                    n_train_round = n_train[self.round-1]
+                    n_train_round = n_train[r-1]
                 except:
                     n_train_round = n_train[-1]
             else:
                 n_train_round = n_train
+
+            if type(epochs) == list:
+                try:
+                    epochs_round = epochs[r-1]
+                except:
+                    epochs_round = epochs[-1]
+            else:
+                epochs_round = epochs
+
+            epochs_cbk_round = epochs_round if epochs_cbk is None else epochs_cbk
 
             # draw training data (z-transformed params and stats)
             verbose = '(round {}) '.format(self.round) if self.verbose else False
@@ -211,7 +220,7 @@ class SNPE(BaseInference):
                         stats=fstats,
                         obs=fobs_z, 
                         kernel_loss=kernel_loss, 
-                        epochs=epochs_cbk, #epochs 
+                        epochs=epochs_cbk_round, #epochs 
                         minibatch=minibatch_cbk, #minibatch, 
                         stop_on_nan=stop_on_nan,
                         seed=self.gen_newseed(), 
@@ -235,7 +244,7 @@ class SNPE(BaseInference):
                         seed=self.gen_newseed(),
                         monitor=self.monitor_dict_from_names(monitor),
                         **kwargs)
-            logs.append(t.train(epochs=epochs, minibatch=minibatch,
+            logs.append(t.train(epochs=epochs_round, minibatch=minibatch,
                                 verbose=verbose, stop_on_nan=stop_on_nan))
 
             logs[-1]['cbkrnl'] = cbkrnl
