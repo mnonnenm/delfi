@@ -15,7 +15,7 @@ dtype = theano.config.floatX
 class SNPE(BaseInference):
     def __init__(self, generator, obs, prior_norm=False, pilot_samples=100,
                  convert_to_T=3, reg_lambda=0.01, seed=None, verbose=True,
-                 **kwargs):
+                 reinit_weights=False, **kwargs):
         """Sequential neural posterior estimation (SNPE)
 
         Parameters
@@ -63,6 +63,8 @@ class SNPE(BaseInference):
         self.round = 0
         self.convert_to_T = convert_to_T
 
+        self.reinit_weights = reinit_weights
+
         # placeholder for importance weights
         self.network.iws = tt.vector('iws', dtype=dtype)
 
@@ -103,7 +105,8 @@ class SNPE(BaseInference):
 
     def run(self, n_train=100, n_rounds=2, epochs=100, minibatch=50,
             round_cl=1, stop_on_nan=False, monitor=None, kernel_loss=None, 
-            epochs_cbk=None, minibatch_cbk=None, **kwargs):
+            epochs_cbk=None, minibatch_cbk=None, 
+            **kwargs):
         """Run algorithm
 
         Parameters
@@ -147,6 +150,11 @@ class SNPE(BaseInference):
 
         for r in range(n_rounds):
             self.round += 1
+
+            if self.round > 1 and self.reinit_weights:
+                print('re-initalizing network weights')
+                self.reinit_network()
+
 
             # if round > 1, set new proposal distribution before sampling
             if self.round > 1:
