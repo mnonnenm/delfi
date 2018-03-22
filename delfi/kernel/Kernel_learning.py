@@ -39,6 +39,7 @@ class KernelLayer_offset(lasagne.layers.Layer):
 
     def get_output_shape_for(self, input_shape):
         return (input_shape[0],)    
+        
     
 class KernelLayer_full(lasagne.layers.Layer):
     def __init__(self, incoming, B=lasagne.init.Normal(0.01), Z=lasagne.init.Normal(0.01), **kwargs):
@@ -132,7 +133,7 @@ def kernel_opt(iws, stats, obs, kernel_loss=None, step=lu.adam,
 
     # set up learning model 
     l_in = lasagne.layers.InputLayer(shape=(None,obs.size),input_var=input_var)
-    l_dot = KernelLayer_full(l_in, name='kernel_layer')
+    l_dot = KernelLayer_offset(l_in, name='kernel_layer')
     prediction = lasagne.layers.get_output(l_dot)
     w_opt = prediction * target_var
     
