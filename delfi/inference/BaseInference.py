@@ -88,6 +88,9 @@ class BaseInference(metaclass=ABCMetaDoc):
         pass
 
     def reinit_network(self):
+        """Reinitializes the network instance (re-setting the weights!) 
+
+        """
         self.network = NeuralNet(**self.kwargs)
         self.svi = self.network.svi
 
