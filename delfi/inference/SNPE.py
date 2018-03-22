@@ -105,7 +105,7 @@ class SNPE(BaseInference):
 
     def run(self, n_train=100, n_rounds=2, epochs=100, minibatch=50,
             round_cl=1, stop_on_nan=False, monitor=None, kernel_loss=None, 
-            epochs_cbk=None, minibatch_cbk=None, 
+            epochs_cbk=None, cbk_feature_layer=0, minibatch_cbk=None, 
             **kwargs):
         """Run algorithm
 
@@ -151,11 +151,6 @@ class SNPE(BaseInference):
         for r in range(n_rounds):
             self.round += 1
 
-            if self.round > 1 and self.reinit_weights:
-                print('re-initalizing network weights')
-                self.reinit_network()
-
-
             # if round > 1, set new proposal distribution before sampling
             if self.round > 1:
                 # posterior becomes new proposal prior
@@ -170,6 +165,10 @@ class SNPE(BaseInference):
                     proposal = proposal.convert_to_T(dofs=dofs)
 
                 self.generator.proposal = proposal
+
+            if self.round > 1 and self.reinit_weights:
+                print('re-initalizing network weights')
+                self.reinit_network()                
 
             # number of training examples for this round
             if type(n_train) == list:
@@ -211,17 +210,17 @@ class SNPE(BaseInference):
                         print('fitting calibration kernel ...')
 
                     ks = list(self.network.layer.keys())
-                    hiddens = np.where([i[:6]=='hidden' for i in ks])[0]
-                    layer_index = 0 #hiddens[-1] # pick last hidden layer
-                    hl = self.network.layer[ks[layer_index]]
+                    #hiddens = np.where([i[:6]=='hidden' for i in ks])[0]
+                    #cbk_feature_layer = hiddens[-1] # pick last hidden layer
+                    hl = self.network.layer[ks[cbk_feature_layer]]
 
                     stat_features = theano.function(
                         inputs=[self.network.stats],
                         outputs=ll.get_output(hl))
 
-                    fstats = stat_features(trn_data[1].reshape(n_train_round,-1))
+                    fstats = stat_features(trn_data[1]).reshape(n_train_round,-1)
                     obs_z = (self.obs - self.stats_mean) / self.stats_std
-                    fobs_z = stat_features(obs_z)
+                    fobs_z = stat_features(obs_z).reshape(1,-1)
 
                     cbkrnl, cbl = kernel_opt(
                         iws=iws.astype(np.float32), 
