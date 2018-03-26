@@ -13,8 +13,9 @@ dtype = theano.config.floatX
 
 
 class SNPE(BaseInference):
-    def __init__(self, generator, obs, prior_norm=False, pilot_samples=100,
-                 convert_to_T=3, reg_lambda=0.01, seed=None, verbose=True,
+    def __init__(self, generator, obs, prior_norm=False, init_norm=None,
+                 pilot_samples=100, convert_to_T=3, 
+                 reg_lambda=0.01, seed=None, verbose=True,
                  reinit_weights=False, **kwargs):
         """Sequential neural posterior estimation (SNPE)
 
@@ -59,6 +60,14 @@ class SNPE(BaseInference):
                          pilot_samples=pilot_samples, seed=seed,
                          verbose=verbose, **kwargs)
         self.obs = obs
+
+        # optional: z-transform output for obs (also re-centres x onto obs!)
+        self.init_norm = init_norm
+        self.init_fcv = 0.8
+        if self.init_norm:
+            print('standardizing network initialization')
+            self.standardize_init(fcv = self.init_fcv)
+
         self.reg_lambda = reg_lambda
         self.round = 0
         self.convert_to_T = convert_to_T
@@ -167,8 +176,11 @@ class SNPE(BaseInference):
                 self.generator.proposal = proposal
 
             if self.round > 1 and self.reinit_weights:
-                print('re-initalizing network weights')
+                print('re-initializing network weights')
                 self.reinit_network()                
+                if self.init_norm:
+                    print('standardizing network initialization')
+                    self.standardize_init(fcv = self.init_fcv)
 
             # number of training examples for this round
             if type(n_train) == list:

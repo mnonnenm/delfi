@@ -9,7 +9,8 @@ from delfi.neuralnet.loss.regularizer import svi_kl_zero
 
 
 class CDELFI(BaseInference):
-    def __init__(self, generator, obs, prior_norm=False, pilot_samples=100,
+    def __init__(self, generator, obs, prior_norm=False,
+                 pilot_samples=100,
                  n_components=1, reg_lambda=0.01, seed=None, verbose=True,
                  **kwargs):
         """Conditional density estimation likelihood-free inference (CDE-LFI)
@@ -59,6 +60,7 @@ class CDELFI(BaseInference):
 
         self.n_components = n_components
         self.obs = obs
+
 
         if np.any(np.isnan(self.obs)):
             raise ValueError("Observed data contains NaNs")

@@ -7,7 +7,9 @@ from delfi.utils.meta import ABCMetaDoc
 
 
 class BaseInference(metaclass=ABCMetaDoc):
-    def __init__(self, generator, prior_norm=True, pilot_samples=100,
+    def __init__(self, generator, 
+                 prior_norm=True,  
+                 pilot_samples=100,
                  seed=None, verbose=True, **kwargs):
         """Abstract base class for inference algorithms
 
@@ -93,6 +95,81 @@ class BaseInference(metaclass=ABCMetaDoc):
         """
         self.network = NeuralNet(**self.kwargs)
         self.svi = self.network.svi
+
+    def centre_on_obs(self):
+        """ Centres first-layer input onto observed summary statistics 
+
+        Ensures x' = x - xo, i.e. first-layer input x' = 0 for x = xo.
+        """
+
+        self.stats_mean = self.obs.flatten()
+
+    def remove_hidden_biases(self):
+        """ Resets all bias weights in hidden layers to zero.
+
+        """
+        def idx_hiddens(x):
+            return x.name[0]=='h'
+
+        for b in filter(idx_hiddens, self.network.mps_bp):
+            b.set_value(np.zeros_like(b.get_value()))
+
+    def conditional_norm(self, fcv = 0.8):
+        """ Normalizes current network output at obersved summary statistics
+
+
+        Parameters
+        ----------
+        fcv : float
+            Fraction of total that comes from uncertainty over components, i.e.
+            Var[th] = E[Var[th|z]] + Var[E[th|z]]
+                    =  (1-fcv)     +     fcv       = 1
+        """
+        mog = self.predict(self.obs)
+
+        assert np.all(np.diff(mog.a)==0.) # assumes uniform alpha
+
+        assert len(mog.xs) == 2 # currently only valid for 2 components
+        Z1inv = np.sqrt((1.-fcv)*2./(mog.xs[0].S + mog.xs[1].S)).reshape(-1)
+        Z2inv = np.sqrt(  fcv   *4./(mog.xs[0].m - mog.xs[1].m)**2).reshape(-1)
+
+        def idx_MoG(x):
+            return x.name[:5]=='means'
+
+        # first we need the center of means
+        mu = np.zeros_like(mog.xs[0].m)
+        for b in filter(idx_MoG, self.network.mps_bp):
+            mu += b.get_value()
+        mu /= self.network.n_components
+
+        # center and normalize means
+        for b in filter(idx_MoG, self.network.mps_bp):
+            b.set_value(Z2inv * (b.get_value() - mu))
+
+        # normalize covariances
+        def idx_MoG(x):
+            return x.name[:10]=='precisions'
+        for b in filter(idx_MoG, self.network.mps_bp):
+            b.set_value(b.get_value() - np.log(Z1inv))
+
+
+    def standardize_init(self, fcv = 0.8):
+        """ Standardizes the network initialization on obs
+
+        Ensures output distributions for xo have mean zero and unit variance.
+        Alters hidden layers to propagates x=xo as zero to the last layer, and
+        alters the MoG layers to produce the desired output distribution. 
+        """
+
+        # ensure x' = x - xo
+        self.centre_on_obs()
+
+        # ensure x' = 0 stays zero up to MoG layer (setting biases to zero)
+        self.remove_hidden_biases()
+
+        # ensure MoG returns standardized output on x' = 0
+        self.conditional_norm(fcv)
+
 
     def gen(self, n_samples, n_reps=1, prior_mixin=0, verbose=None):
         """Generate from generator and z-transform

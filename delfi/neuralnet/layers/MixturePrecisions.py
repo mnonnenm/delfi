@@ -18,7 +18,7 @@ class MixturePrecisionsLayer(lasagne.layers.Layer):
                  n_dim,
                  svi=True,
                  mWs_init=linit.HeNormal(),
-                 mbs_init=linit.Constant([0.]),
+                 mbs_init=linit.Normal([1.]),
                  sWs_init=linit.Constant([-5.]),
                  sbs_init=linit.Constant([-5.]),
                  **kwargs):
