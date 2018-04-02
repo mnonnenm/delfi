@@ -5,6 +5,8 @@ from delfi.neuralnet.NeuralNet import NeuralNet
 from delfi.neuralnet.Trainer import Trainer
 from delfi.utils.meta import ABCMetaDoc
 
+import theano
+dtype = theano.config.floatX
 
 class BaseInference(metaclass=ABCMetaDoc):
     def __init__(self, generator, 
@@ -125,32 +127,50 @@ class BaseInference(metaclass=ABCMetaDoc):
             Var[th] = E[Var[th|z]] + Var[E[th|z]]
                     =  (1-fcv)     +     fcv       = 1
         """
-        mog = self.predict(self.obs)
+        # avoiding CDELFI.predict() attempt to analytically correct for proposal
+        obz = (self.obs - self.stats_mean) / self.stats_std
+        posterior = self.network.get_mog(obz, deterministic=True)
+        mog =  posterior.ztrans_inv(self.params_mean, self.params_std)
 
         assert np.all(np.diff(mog.a)==0.) # assumes uniform alpha
 
-        assert len(mog.xs) == 2 # currently only valid for 2 components
-        Z1inv = np.sqrt((1.-fcv)*2./(mog.xs[0].S + mog.xs[1].S)).reshape(-1)
-        Z2inv = np.sqrt(  fcv   *4./(mog.xs[0].m - mog.xs[1].m)**2).reshape(-1)
+        n_dim = self.kwargs['n_outputs']
+        triu_mask = np.triu(np.ones([n_dim, n_dim], dtype=dtype), 1)
+        diag_mask = np.eye(n_dim, dtype=dtype)
+
+        mu, Sig = np.zeros_like(mog.xs[0].m), np.zeros_like(mog.xs[0].S)
+        for i in range(self.network.n_components):
+            Sig += mog.a[i] * mog.xs[i].S
+            mu  += mog.a[i] * mog.xs[i].m
+        C = np.zeros_like(Sig)
+        for i in range(self.network.n_components):
+            dmu = mog.xs[i].m - mu if self.network.n_components > 1 else mog.xs[i].m
+            C   += mog.a[i] * np.outer(dmu, dmu)
+
+        Z1inv = np.sqrt((1.-fcv) / np.diag(Sig)).reshape(-1)
+        Z2inv = np.sqrt(  fcv    / np.diag( C )).reshape(-1)
 
         def idx_MoG(x):
             return x.name[:5]=='means'
 
         # first we need the center of means
-        mu = np.zeros_like(mog.xs[0].m)
+        mu_ = np.zeros_like(mog.xs[0].m)
         for b in filter(idx_MoG, self.network.mps_bp):
-            mu += b.get_value()
-        mu /= self.network.n_components
+            mu_ += b.get_value()
+        mu_ /= self.network.n_components
 
         # center and normalize means
         for b in filter(idx_MoG, self.network.mps_bp):
-            b.set_value(Z2inv * (b.get_value() - mu))
+            b.set_value(Z2inv * (b.get_value() - mu_))
 
         # normalize covariances
         def idx_MoG(x):
             return x.name[:10]=='precisions'
         for b in filter(idx_MoG, self.network.mps_bp):
-            b.set_value(b.get_value() - np.log(Z1inv))
+            val = b.get_value().copy()
+            val = val.reshape(n_dim,n_dim)
+            val = diag_mask * (val - np.diag(np.log(Z1inv))) + triu_mask * val.dot(np.diag(1./Z1inv))
+            b.set_value(val.flatten())
 
 
     def standardize_init(self, fcv = 0.8):

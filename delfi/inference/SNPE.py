@@ -13,7 +13,7 @@ dtype = theano.config.floatX
 
 
 class SNPE(BaseInference):
-    def __init__(self, generator, obs, prior_norm=False, init_norm=None,
+    def __init__(self, generator, obs, prior_norm=False, init_norm=False,
                  pilot_samples=100, convert_to_T=3, 
                  reg_lambda=0.01, seed=None, verbose=True,
                  reinit_weights=False, **kwargs):
@@ -59,11 +59,12 @@ class SNPE(BaseInference):
         super().__init__(generator, prior_norm=prior_norm,
                          pilot_samples=pilot_samples, seed=seed,
                          verbose=verbose, **kwargs)
+
         self.obs = obs
 
         # optional: z-transform output for obs (also re-centres x onto obs!)
         self.init_norm = init_norm
-        self.init_fcv = 0.8
+        self.init_fcv = 0.8 if self.network.n_components > 1 else 0.
         if self.init_norm:
             print('standardizing network initialization')
             self.standardize_init(fcv = self.init_fcv)

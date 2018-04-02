@@ -9,10 +9,10 @@ from delfi.neuralnet.loss.regularizer import svi_kl_zero
 
 
 class CDELFI(BaseInference):
-    def __init__(self, generator, obs, prior_norm=False,
+    def __init__(self, generator, obs, prior_norm=False, init_norm=False,
                  pilot_samples=100,
                  n_components=1, reg_lambda=0.01, seed=None, verbose=True,
-                 **kwargs):
+                 reinit_weights=False, **kwargs):
         """Conditional density estimation likelihood-free inference (CDE-LFI)
 
         Implementation of algorithms 1 and 2 of Papamakarios and Murray, 2016.
@@ -61,6 +61,17 @@ class CDELFI(BaseInference):
         self.n_components = n_components
         self.obs = obs
 
+        # optional: z-transform output for obs (also re-centres x onto obs!)
+        self.init_norm = init_norm
+        self.init_fcv = 0.8 if self.n_components > 1 else 0.
+        if self.init_norm:
+            print('standardizing network initialization')
+            if self.network.n_components > 1:
+                self.standardize_init(fcv = self.init_fcv)
+            else:
+                self.standardize_init(fcv = 0.)
+
+        self.reinit_weights = reinit_weights
 
         if np.any(np.isnan(self.obs)):
             raise ValueError("Observed data contains NaNs")
@@ -132,10 +143,22 @@ class CDELFI(BaseInference):
 
         for r in range(1, n_rounds + 1):  # start at 1
             # if round > 1, set new proposal distribution before sampling
+
             if r > 1:
                 # posterior becomes new proposal prior
                 posterior = self.predict(self.obs)
                 self.generator.proposal = posterior.project_to_gaussian()
+
+                if self.reinit_weights:
+                    print('re-initializing network weights')
+                    self.reinit_network()                                    
+                    if self.init_norm:
+                        print('standardizing network initialization')
+                        if self.network.n_components > 1:
+                            self.standardize_init(fcv = self.init_fcv)
+                        else:
+                            self.standardize_init(fcv = 0.)
+
 
             # number of training examples for this round
             if type(n_train) == list:
@@ -161,23 +184,32 @@ class CDELFI(BaseInference):
 
             # algorithm 2 of Papamakarios and Murray
             if r == n_rounds and self.n_components > 1:
-                # get parameters of current network
-                old_params = self.network.params_dict.copy()
 
-                # create new network
-                network_spec = self.network.spec_dict.copy()
-                network_spec.update({'n_components': self.n_components})
-                self.network = NeuralNet(**network_spec)
-                new_params = self.network.params_dict
+                if self.reinit_weights:
+                    print('re-initializing network weights')
+                    self.kwargs.update({'n_components': self.n_components})
+                    self.reinit_network()                                    
+                    if self.init_norm:
+                        print('standardizing network initialization')
+                        self.standardize_init(fcv = self.init_fcv)
+                else:
+                    # get parameters of current network
+                    old_params = self.network.params_dict.copy()
 
-                # set weights of new network
-                # weights of additional components are duplicates
-                for p in [s for s in new_params if 'means' in s or
-                          'precisions' in s]:
-                    new_params[p] = old_params[p[:-1] + '0']
-                    new_params[p] += 1.0e-6*self.rng.randn(*new_params[p].shape)
+                    # create new network
+                    network_spec = self.network.spec_dict.copy()
+                    network_spec.update({'n_components': self.n_components})
+                    self.network = NeuralNet(**network_spec)
+                    new_params = self.network.params_dict
 
-                self.network.params_dict = new_params
+                    # set weights of new network
+                    # weights of additional components are duplicates
+                    for p in [s for s in new_params if 'means' in s or
+                              'precisions' in s]:
+                        new_params[p] = old_params[p[:-1] + '0']
+                        new_params[p] += 1.0e-6*self.rng.randn(*new_params[p].shape)
+
+                    self.network.params_dict = new_params
 
             trn_inputs = [self.network.params, self.network.stats]
 
