@@ -6,6 +6,7 @@ from delfi.distribution.Gamma import Gamma
 
 from delfi.distribution.MixedDistribution import MixedDistribution
 from delfi.distribution.StackedDistribution import StackedDistribution
+from delfi.distribution.TruncatedGaussian import TruncatedGaussian
 
 from delfi.distribution.mixture.EllipsoidalMixture import MoE
 from delfi.distribution.mixture.GaussianMixture import MoG
