@@ -26,6 +26,12 @@ class Default(BaseGenerator):
                     if np.any(param[:,ii] < p.offset):
                         return 'resample'
 
+        # if proposal is truncated, reject samples outside of bounds
+        if isinstance(self.proposal, dd.TruncatedGaussian):
+            if np.any(param < self.proposal.lower) or \
+               np.any(param > self.proposal.upper):
+                return 'resample'
+
         return 'accept'
 
     @copy_ancestor_docstring
