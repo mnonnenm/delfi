@@ -115,7 +115,8 @@ class SNPE(BaseInference):
 
     def run(self, n_train=100, n_rounds=2, epochs=100, minibatch=50,
             round_cl=1, stop_on_nan=False, monitor=None, kernel_loss=None, 
-            epochs_cbk=None, cbk_feature_layer=0, minibatch_cbk=None, 
+            epochs_cbk=None, cbk_feature_layer=0, minibatch_cbk=None, reg_lambdas=None,
+            init_single_layer_net=False,
             **kwargs):
         """Run algorithm
 
@@ -257,6 +258,14 @@ class SNPE(BaseInference):
             trn_data = (trn_data[0], trn_data[1], iws)
             trn_inputs = [self.network.params, self.network.stats,
                           self.network.iws]
+
+            if init_single_layer_net:
+                print('initializing network from homoscedastic linear-affine fit')
+                self.init_single_layer_net(trn_data, self.obs)                          
+
+            if not reg_lambdas is None:
+                self.reg_lambda = reg_lambdas[self.round-1]
+                print('resetting regularization strength to ' + str(self.reg_lambda))
 
             t = Trainer(self.network,
                         self.loss(N=n_train_round, round_cl=round_cl),
