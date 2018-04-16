@@ -17,6 +17,7 @@ class MixturePrecisionsLayer(lasagne.layers.Layer):
                  n_components,
                  n_dim,
                  svi=True,
+                 diag_cov=False,
                  mWs_init=linit.HeNormal(),
                  mbs_init=linit.Constant([0.]),
                  sWs_init=linit.Constant([-5.]),
@@ -49,6 +50,7 @@ class MixturePrecisionsLayer(lasagne.layers.Layer):
         """
         super(MixturePrecisionsLayer, self).__init__(incoming, **kwargs)
         self.n_components = n_components
+        self.diag_cov = diag_cov
         self.n_dim = n_dim
         self.svi = svi
 
@@ -85,7 +87,10 @@ class MixturePrecisionsLayer(lasagne.layers.Layer):
             ldetUs : list of length n_components with (batch, n_dim, n_dim)
                 Log determinants of precisions
         """
-        triu_mask = np.triu(np.ones([self.n_dim, self.n_dim], dtype=dtype), 1)
+        if self.diag_cov:
+            triu_mask = np.zeros([self.n_dim, self.n_dim], dtype=dtype)
+        else:
+            triu_mask = np.triu(np.ones([self.n_dim, self.n_dim], dtype=dtype), 1)
         diag_mask = np.eye(self.n_dim, dtype=dtype)
         offdiag_mask = np.ones(self.n_dim, dtype=dtype) - \
             np.eye(self.n_dim, dtype=dtype)
