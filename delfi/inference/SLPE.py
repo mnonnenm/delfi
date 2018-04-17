@@ -5,6 +5,11 @@ import theano.tensor as tt
 from delfi.inference.BaseInference import BaseInference
 from delfi.neuralnet.Trainer import Trainer
 from delfi.kernel.Kernel_learning import kernel_opt
+from delfi.kernel.ImproperFlat import ImproperFlat
+from delfi.kernel.BaseKernel import BaseKernel
+from delfi.kernel.Gauss import Gauss
+from delfi.kernel.Uniform import Uniform
+from delfi.kernel.Epanechnikov import Epanechnikov
 
 from delfi.neuralnet.LinearNet import LinearNet
 
@@ -13,9 +18,9 @@ dtype = theano.config.floatX
 
 
 class SLPE(BaseInference):
-    def __init__(self, generator, obs, prior_norm=False, init_norm=False,
+    def __init__(self, generator, obs, prior_norm=False,
                  pilot_samples=100, convert_to_T=None, centre_on_obs=True,
-                 reg_lambda=0.01, seed=None, verbose=True,
+                 reg_lambda=0.01, seed=None, verbose=True, cbkrnl=None,
                  reinit_weights=False, **kwargs):
         """Sequential linear posterior estimation (SLPE)
 
@@ -49,6 +54,7 @@ class SLPE(BaseInference):
                     Number of hidden units per layer of the neural network
                 svi : bool
                     Whether to use SVI version of the network or not
+        cbkrnl: calibration kernel
 
         Attributes
         ----------
@@ -104,11 +110,17 @@ class SLPE(BaseInference):
         self.round = 0
         self.convert_to_T = convert_to_T
 
+        if cbkrnl is None: 
+            self.cbkrnl = ImproperFlat(self.obz) 
+        elif issubclass(cbkrnl, BaseKernel):
+            self.cbkrnl = cbkrnl
+        else:
+            raise NotImplementedError
 
     def run(self, n_train=100, n_rounds=2, 
             kernel_loss=None, stop_on_nan=False,
             epochs_cbk=None, cbk_feature_layer=0, minibatch_cbk=None, 
-            reg_lambdas=None, **kwargs):
+            reg_lambdas=None, cbk_delta=None, **kwargs):
         """Run algorithm
 
         Parameters
@@ -192,6 +204,15 @@ class SLPE(BaseInference):
             iws = np.ones((n_train_round,))
 
             cbkrnl, cbl = None, None
+            fstats = trn_data[1].reshape(n_train_round,-1)
+            fobs_z = self.standardize_stats(self.obs).reshape(1,-1)
+
+            if self.round==1 and cbk_delta is not None:
+                print('setting initial kernel')
+                delta = self.get_kernelwidth(cbk_delta, trn_data)
+                self.cbkrnl = Uniform(self.obz, spherical=True, bandwidth=delta)
+
+
             if self.generator.proposal is not None:
                 params = self.params_std * trn_data[0] + self.params_mean
                 p_prior = self.generator.prior.eval(params, log=False)
@@ -202,9 +223,6 @@ class SLPE(BaseInference):
                 if not kernel_loss is None:
                     if verbose:
                         print('fitting calibration kernel ...')
-
-                    fstats = trn_data[1].reshape(n_train_round,-1)
-                    fobs_z = self.standardize_stats(self.obs).reshape(1,-1)
 
                     cbkrnl, cbl = kernel_opt(
                         iws=iws.astype(np.float32), 
@@ -219,8 +237,9 @@ class SLPE(BaseInference):
                     if verbose: 
                         print('done.')
 
-                    iws *= cbkrnl.eval(fstats)
-            logs.append({'cbkrnl' : cbkrnl, 'cbk_loss' : cbl})
+                    self.cbkrnl = cbkrnl
+            iws *= self.cbkrnl.eval(fstats)
+            logs.append({'cbkrnl' : self.cbkrnl, 'cbk_loss' : cbl})
 
             # normalize weights
             iws = (iws/np.sum(iws))*n_train_round
@@ -249,3 +268,14 @@ class SLPE(BaseInference):
         x_zt = self.standardize_stats(x)
         posterior = self.network.get_mog(x_zt)
         return posterior.ztrans_inv(self.params_mean, self.params_std)
+
+
+    def get_kernelwidth(self, pdelta, trn_data):
+
+        assert pdelta <= 1.
+
+        dx = trn_data[1] - self.obz
+        dist = np.sqrt(np.sum( dx**2, axis=1 ))
+        idx = np.argsort( dist )[int(dist.size*pdelta)]        
+
+        return dist[idx]
