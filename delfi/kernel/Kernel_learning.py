@@ -103,7 +103,7 @@ class My_Helper_Kernel(metaclass=ABCMetaDoc):
 
         Returns
         -------
-        weights : N
+        weights : N x 1
             normalized to be 1. for x = obs
         """
         assert x.shape[0] >= 1, 'x.shape[0] needs to be >= 1'
