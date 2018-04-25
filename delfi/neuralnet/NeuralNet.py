@@ -19,7 +19,7 @@ def MyLogSumExp(x, axis=None):
 class NeuralNet(object):
     def __init__(self, n_inputs, n_outputs, n_components=1, n_filters=[],
                  n_hiddens=[10, 10], n_rnn=None, impute_missing=True, seed=None,
-                 svi=True, diag_cov=False):
+                 svi=True, diag_cov=False, homoscedastic=False):
         """Initialize a mixture density network with custom layers
 
         Parameters
@@ -47,6 +47,7 @@ class NeuralNet(object):
         self.impute_missing = impute_missing
         self.n_components = n_components
         self.diag_cov = diag_cov
+        self.homoscedastic = homoscedastic
         self.n_filters = n_filters
         self.n_hiddens = n_hiddens
         self.n_outputs = n_outputs
@@ -161,9 +162,15 @@ class NeuralNet(object):
         self.layer['mixture_means'] = dl.MixtureMeansLayer(
             last_hidden, n_components=n_components, n_dim=n_outputs, svi=svi,
             name='means')
-        self.layer['mixture_precisions'] = dl.MixturePrecisionsLayer(
-            last_hidden, n_components=n_components, n_dim=n_outputs, svi=svi,
-            name='precisions', diag_cov=diag_cov)
+
+        if homoscedastic:            
+            self.layer['mixture_precisions'] = dl.MixtureHomoscedasticPrecisionsLayer(
+                last_hidden, n_components=n_components, n_dim=n_outputs, svi=svi,
+                name='precisions', diag_cov=diag_cov, homoscedastic=homoscedastic)
+        else: 
+            self.layer['mixture_precisions'] = dl.MixturePrecisionsLayer(
+                last_hidden, n_components=n_components, n_dim=n_outputs, svi=svi,
+                name='precisions', diag_cov=diag_cov, homoscedastic=homoscedastic)
         last_mog = [self.layer['mixture_weights'],
                     self.layer['mixture_means'],
                     self.layer['mixture_precisions']]

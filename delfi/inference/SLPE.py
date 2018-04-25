@@ -269,7 +269,6 @@ class SLPE(BaseInference):
         posterior = self.network.get_mog(x_zt)
         return posterior.ztrans_inv(self.params_mean, self.params_std)
 
-
     def get_kernelwidth(self, pdelta, trn_data):
 
         assert pdelta <= 1.

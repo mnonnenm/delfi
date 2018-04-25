@@ -229,7 +229,8 @@ class BaseInference(metaclass=ABCMetaDoc):
 
         self.network.aps[np.where(names=='means.mW0')[0][0]].set_value(A)
         self.network.aps[np.where(names=='means.mb0')[0][0]].set_value(b)
-        self.network.aps[np.where(names=='precisions.mW0')[0][0]].set_value(C)
+        if 'precisions.mW0' in names:
+            self.network.aps[np.where(names=='precisions.mW0')[0][0]].set_value(C)
         self.network.aps[np.where(names=='precisions.mb0')[0][0]].set_value(d)
 
 

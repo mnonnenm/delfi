@@ -113,10 +113,10 @@ class SNPE(BaseInference):
 
         return loss
 
-    def run(self, n_train=100, n_rounds=2, epochs=100, minibatch=50,
+    def run(self, n_train=100, n_rounds=2, epochs=100, minibatch=50, clip_IW=None,
             round_cl=1, stop_on_nan=False, monitor=None, kernel_loss=None, 
             epochs_cbk=None, cbk_feature_layer=0, minibatch_cbk=None, reg_lambdas=None,
-            init_single_layer_net=False,
+            init_single_layer_net=False, naive_weights=False,
             **kwargs):
         """Run algorithm
 
@@ -159,6 +159,7 @@ class SNPE(BaseInference):
 
         minibatch_cbk = minibatch if minibatch_cbk is None else minibatch_cbk
 
+        assert (clip_IW is None) or (clip_IW >= 0. and clip_IW <= 1.) 
         for r in range(n_rounds):
             self.round += 1
 
@@ -254,6 +255,13 @@ class SNPE(BaseInference):
 
             # normalize weights
             iws = (iws/np.sum(iws))*n_train_round
+
+            if not clip_IW is None:
+                idx = np.argsort(iws)[int((1-clip_IW)*n_train_round):]
+                iws[idx] = 0.
+
+            if naive_weights:
+                iws = np.ones((n_train_round,))
 
             trn_data = (trn_data[0], trn_data[1], iws)
             trn_inputs = [self.network.params, self.network.stats,

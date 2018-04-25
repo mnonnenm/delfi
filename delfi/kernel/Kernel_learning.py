@@ -121,7 +121,7 @@ class My_Helper_Kernel(metaclass=ABCMetaDoc):
 def kernel_opt(iws, stats, obs, kernel_loss=None, step=lu.adam,
                epochs=100, minibatch=100, lr=0.001, lr_decay=1.0, 
                max_norm=0.1, monitor=None, monitor_every=None, 
-               stop_on_nan=False, verbose=False, seed=None):
+               stop_on_nan=False, verbose=False, seed=None, **kwargs):
 
     assert kernel_loss in (None, 'x_kl', 'ess')
 
