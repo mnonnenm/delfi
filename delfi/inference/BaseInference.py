@@ -246,13 +246,13 @@ class BaseInference(metaclass=ABCMetaDoc):
             If None is passed, will default to self.verbose
         """
         verbose = self.verbose if verbose is None else verbose
-        params, stats = self.generator.gen(n_samples, prior_mixin=prior_mixin, verbose=verbose)
+        params, stats, sources = self.generator.gen(n_samples, prior_mixin=prior_mixin, verbose=verbose)
 
         # z-transform params and stats
         params = (params - self.params_mean) / self.params_std
         stats = (stats - self.stats_mean) / self.stats_std
 
-        return params, stats
+        return params, stats, sources
 
     def gen_newseed(self):
         """Generates a new random seed"""
