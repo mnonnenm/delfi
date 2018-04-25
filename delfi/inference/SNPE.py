@@ -212,6 +212,9 @@ class SNPE(BaseInference):
             # precompute importance weights
             iws = np.ones((n_train_round,))
 
+
+            print('sources: ', np.unique(trn_data[2]))
+
             cbkrnl, cbl = None, None
             if self.generator.proposal is not None:
                 params = self.params_std * trn_data[0] + self.params_mean
@@ -232,6 +235,7 @@ class SNPE(BaseInference):
                     stat_features = theano.function(
                         inputs=[self.network.stats],
                         outputs=ll.get_output(hl))
+
 
                     fstats = stat_features(trn_data[1]).reshape(n_train_round,-1)
                     obs_z = (self.obs - self.stats_mean) / self.stats_std
