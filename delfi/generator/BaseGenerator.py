@@ -128,7 +128,7 @@ class BaseGenerator(metaclass=ABCMetaDoc):
                 # run forward model for all params, each n_reps times
                 result = self.model.gen(params_batch, n_reps=n_reps, pbar=pbar)
 
-                stats, sources, params = self.process_batch(params_batch, result)
+                stats, params, sources = self.process_batch(params_batch, sources_batch, result)
                 final_sources += sources
                 final_params += params
                 final_stats += stats
@@ -155,7 +155,7 @@ class BaseGenerator(metaclass=ABCMetaDoc):
         sources_data_valid = [] # list of sources with valid data
         data_valid = []  # list of lists containing n_reps dicts with data
 
-        for param, source, datum in zip(params_batch, sources, result):
+        for param, source, datum in zip(params_batch, sources_batch, result):
             # check validity
             response = self._feedback_forward_model(datum)
             if response == 'accept' or skip_feedback:

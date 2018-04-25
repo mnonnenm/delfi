@@ -52,7 +52,7 @@ class BaseInference(metaclass=ABCMetaDoc):
         self.generator.proposal = None
 
         # generate a sample to get input and output dimensions
-        params, stats = generator.gen(1, skip_feedback=True, verbose=False)
+        params, stats, source = generator.gen(1, skip_feedback=True, verbose=False)
         kwargs.update({'n_inputs': stats.shape[1:],
                        'n_outputs': params.shape[1],
                        'seed': self.gen_newseed()})
@@ -266,7 +266,7 @@ class BaseInference(metaclass=ABCMetaDoc):
         """Pilot run in order to find parameters for z-scoring stats
         """
         verbose = '(pilot run) ' if self.verbose else False
-        params, stats = self.generator.gen(n_samples, verbose=verbose)
+        params, stats, sources = self.generator.gen(n_samples, verbose=verbose)
         self.stats_mean = np.nanmean(stats, axis=0)
         self.stats_std = np.nanstd(stats, axis=0)
 

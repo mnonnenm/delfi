@@ -20,7 +20,7 @@ dtype = theano.config.floatX
 class SLPE(BaseInference):
     def __init__(self, generator, obs, prior_norm=False,
                  pilot_samples=100, convert_to_T=None, centre_on_obs=True,
-                 reg_lambda=0.01, seed=None, verbose=True, cbkrnl=None,
+                 reg_lambda=0.01, prior_mixin=0., seed=None, verbose=True, cbkrnl=None,
                  reinit_weights=False, **kwargs):
         """Sequential linear posterior estimation (SLPE)
 
@@ -42,6 +42,10 @@ class SLPE(BaseInference):
             the number specifies the degrees of freedom. None for no conversion
         reg_lambda : float
             Precision parameter for weight regularizer if svi is True
+        prior_mixin : float
+            Percentage of the prior mixed into the proposal prior. While training,
+            an additional prior_mixin * N samples will be drawn from the actual prior
+            in each round            
         seed : int or None
             If provided, random number generator will be seeded
         verbose : bool
@@ -75,7 +79,7 @@ class SLPE(BaseInference):
         self.generator = generator
 
         # generate a sample to get input and output dimensions
-        params, stats = generator.gen(1, skip_feedback=True, verbose=False)
+        params, stats, _ = generator.gen(1, skip_feedback=True, verbose=False)
         kwargs.update({'n_inputs': stats.shape[1],
                        'n_outputs': params.shape[1],
                        'seed': self.gen_newseed()})
@@ -109,6 +113,7 @@ class SLPE(BaseInference):
 
         self.round = 0
         self.convert_to_T = convert_to_T
+        self.prior_mixin = 0. if prior_mixin is None else prior_mixin
 
         if cbkrnl is None: 
             self.cbkrnl = ImproperFlat(self.obz) 
@@ -120,7 +125,7 @@ class SLPE(BaseInference):
     def run(self, n_train=100, n_rounds=2, 
             kernel_loss=None, stop_on_nan=False,
             epochs_cbk=None, cbk_feature_layer=0, minibatch_cbk=None, 
-            reg_lambdas=None, cbk_delta=None, **kwargs):
+            reg_lambdas=None, cbk_delta=None, naive_weights=False, **kwargs):
         """Run algorithm
 
         Parameters
@@ -197,14 +202,19 @@ class SLPE(BaseInference):
 
             # draw training data (z-transformed params and stats)
             verbose = '(round {}) '.format(self.round) if self.verbose else False
-            trn_data = self.gen(n_train_round, verbose=verbose)
+            trn_data = self.gen(n_train_round, prior_mixin=self.prior_mixin, verbose=verbose)
             n_train_round = trn_data[0].shape[0]
 
             # precompute importance weights
             iws = np.ones((n_train_round,))
 
             cbkrnl, cbl = None, None
-            fstats = trn_data[1].reshape(n_train_round,-1)
+            idx_proposal = np.where(trn_data[2])[0]
+
+            if not minibatch_cbk is None:
+                minibatch_cbk = np.min((minibatch_cbk, idx_proposal.size))
+
+            fstats = trn_data[1][idx_proposal,:].reshape(idx_proposal.size,-1)
             fobs_z = self.standardize_stats(self.obs).reshape(1,-1)
 
             if self.round==1 and cbk_delta is not None:
@@ -217,7 +227,7 @@ class SLPE(BaseInference):
                 params = self.params_std * trn_data[0] + self.params_mean
                 p_prior = self.generator.prior.eval(params, log=False)
                 p_proposal = self.generator.proposal.eval(params, log=False)
-                iws *= p_prior / p_proposal
+                iws *= p_prior / (self.prior_mixin * p_prior + (1. - self.prior_mixin) * p_proposal)
 
                 # train calibration kernel (learns own normalization)
                 if not kernel_loss is None:
@@ -225,7 +235,7 @@ class SLPE(BaseInference):
                         print('fitting calibration kernel ...')
 
                     cbkrnl, cbl = kernel_opt(
-                        iws=iws.astype(np.float32), 
+                        iws=iws[idx_proposal].astype(np.float32), 
                         stats=fstats,
                         obs=fobs_z, 
                         kernel_loss=kernel_loss, 
@@ -238,7 +248,12 @@ class SLPE(BaseInference):
                         print('done.')
 
                     self.cbkrnl = cbkrnl
+            fstats = trn_data[1].reshape(n_train_round,-1)                    
             iws *= self.cbkrnl.eval(fstats)
+
+            if naive_weights:
+                iws = np.ones((n_train_round,))            
+
             logs.append({'cbkrnl' : self.cbkrnl, 'cbk_loss' : cbl})
 
             # normalize weights
