@@ -30,7 +30,10 @@ class BaseGenerator(metaclass=ABCMetaDoc):
         self.summary = summary
         self.proposal = None
 
-        self.rng = np.random.RandomState(seed=seed)
+        if seed is not None:
+            self.rng = np.random.RandomState(seed=seed)
+        else:
+            self.rng = np.random.RandomState()
 
     def draw_params(self, n_samples, skip_feedback=False, prior_mixin=0, verbose=True):
         if not verbose:
