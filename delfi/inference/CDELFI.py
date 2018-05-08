@@ -151,14 +151,13 @@ class CDELFI(BaseInference):
 
                 if self.reinit_weights:
                     print('re-initializing network weights')
-                    self.reinit_network()                                    
+                    self.reinit_network()
                     if self.init_norm:
                         print('standardizing network initialization')
                         if self.network.n_components > 1:
                             self.standardize_init(fcv = self.init_fcv)
                         else:
                             self.standardize_init(fcv = 0.)
-
 
             # number of training examples for this round
             if type(n_train) == list:
@@ -180,7 +179,7 @@ class CDELFI(BaseInference):
 
             # draw training data (z-transformed params and stats)
             verbose = '(round {}) '.format(r) if self.verbose else False
-            trn_data = self.gen(n_train_round, verbose=verbose)
+            trn_data = self.gen(n_train_round, verbose=verbose)[:2]
 
             # algorithm 2 of Papamakarios and Murray
             if r == n_rounds and self.n_components > 1:
