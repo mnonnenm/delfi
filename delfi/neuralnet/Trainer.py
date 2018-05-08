@@ -60,7 +60,11 @@ class Trainer:
             grads = lu.total_norm_constraint(grads, max_norm=max_norm)
 
         # updates
-        self.lr = lr
+        if 'lr' in kwargs.keys():
+            self.lr = kwargs['lr']
+            kwargs.pop('lr')
+        else:
+            self.lr = lr
         self.lr_decay = lr_decay
         self.lr_op = theano.shared(np.array(self.lr, dtype=dtype))
         self.updates = step(grads, self.network.aps, learning_rate=self.lr_op, **kwargs)
