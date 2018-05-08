@@ -21,6 +21,9 @@ class LinearNet(object):
                  seed=None, svi=True, diag_cov=False):
         """Initialize a linear-affine density model with homoscedastic noise
 
+        Assumes that the input data (summary statistics) are centered on obs_stats,
+        i.e. it fits only differences x - xo
+
         Parameters
         ----------
         n_inputs : int or tuple of ints or list of ints
@@ -115,15 +118,20 @@ class LinearNet(object):
         assert stats.shape[0] == 1, 'x.shape[0] needs to be 1'
 
         a = np.ones(1)
-        ms = [ self.params_dict['means.mb0'] ]
-
-        if self.diag_cov:
-            U = self.params_dict['precisions.mb0'].reshape(self.n_outputs, self.n_outputs)
-            Us = [ np.diag(np.exp(np.diag(U))) ]
-        else:
-            raise NotImplementedError
+        ms = [ self.get_mean(stats) ]
+        Us = [ get_cov(self, stats) ]
 
         return dd.MoG(a=a, ms=ms, Us=Us, seed=self.gen_newseed())
+
+    def get_mean(self, stats):
+        return stats.dot(self.params_dict['means.mW0']) + np.atleast_2d(self.params_dict['means.mb0'])
+
+    def get_cov(self, stats):
+        if self.diag_cov:
+            U = self.params_dict['precisions.mb0']
+            return np.diag(np.exp(np.diag(U.reshape(self.n_outputs, self.n_outputs))))
+        else:
+            raise NotImplementedError
 
     def gen_newseed(self):
         """Generates a new random seed"""
