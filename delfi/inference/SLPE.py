@@ -4,6 +4,7 @@ import theano.tensor as tt
 
 from delfi.inference.BaseInference import BaseInference
 from delfi.neuralnet.Trainer import Trainer
+from delfi.neuralnet.LinearNet import LinearNet
 from delfi.kernel.Kernel_learning import kernel_opt
 from delfi.kernel.ImproperFlat import ImproperFlat
 from delfi.kernel.BaseKernel import BaseKernel
