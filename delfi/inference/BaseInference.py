@@ -77,8 +77,11 @@ class BaseInference(metaclass=ABCMetaDoc):
             self.pilot_run(pilot_samples)
         else:
             # parameters are set such that z-transform has no effect
-            self.stats_mean = np.zeros((stats.shape[1],))
-            self.stats_std = np.ones((stats.shape[1],))
+            self.stats_mean = np.zeros((1,*stats.shape[1:]))
+            self.stats_std = np.ones((1,*stats.shape[1:]))
+
+            print('init mean' , self.stats_mean.shape)
+            print('init  std' , self.stats_std.shape)
 
         # observables contains vars that can be monitored during training
         self.compile_observables()
@@ -104,7 +107,7 @@ class BaseInference(metaclass=ABCMetaDoc):
         Ensures x' = x - xo, i.e. first-layer input x' = 0 for x = xo.
         """
 
-        self.stats_mean = self.obs.flatten()
+        self.stats_mean = self.obs.copy()
 
     def remove_hidden_biases(self):
         """ Resets all bias weights in hidden layers to zero.
@@ -128,8 +131,11 @@ class BaseInference(metaclass=ABCMetaDoc):
                     =  (1-fcv)     +     fcv       = 1
         """
         # avoiding CDELFI.predict() attempt to analytically correct for proposal
+        print('obs', self.obs.shape)
+        print('mean', self.stats_mean.shape)
+        print('std', self.stats_std.shape)
         obz = (self.obs - self.stats_mean) / self.stats_std
-        posterior = self.network.get_mog(obz, deterministic=True)
+        posterior = self.network.get_mog(obz.reshape(self.obs.shape), deterministic=True)
         mog =  posterior.ztrans_inv(self.params_mean, self.params_std)
 
         assert np.all(np.diff(mog.a)==0.) # assumes uniform alpha
@@ -267,8 +273,8 @@ class BaseInference(metaclass=ABCMetaDoc):
         """
         verbose = '(pilot run) ' if self.verbose else False
         params, stats, sources = self.generator.gen(n_samples, verbose=verbose)
-        self.stats_mean = np.nanmean(stats, axis=0)
-        self.stats_std = np.nanstd(stats, axis=0)
+        self.stats_mean = np.nanmean(stats, axis=0).reshape((1, *stats.shape[1:]))
+        self.stats_std = np.nanstd(stats, axis=0).reshape((1, *stats.shape[1:]))
 
     def predict(self, x, deterministic=True):
         """Predict posterior given x
