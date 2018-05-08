@@ -220,7 +220,7 @@ class SLPE(BaseInference):
             if self.round==1 and cbk_delta is not None:
                 print('setting initial kernel')
                 delta = self.get_kernelwidth(cbk_delta, trn_data)
-                self.cbkrnl = Uniform(self.obz, spherical=True, bandwidth=delta)
+                self.cbkrnl = Uniform(self.obz.reshape(1,-1), spherical=True, bandwidth=delta)
 
 
             if self.generator.proposal is not None:
