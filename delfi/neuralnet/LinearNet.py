@@ -128,7 +128,7 @@ class LinearNet(object):
 
     def get_cov(self, stats):
         if self.diag_cov:
-            U = self.params_dict['precisions.mb0')
+            U = self.params_dict['precisions.mb0']
             return np.diag(np.exp(np.diag(U.reshape(self.n_outputs, self.n_outputs))))
         else:
             raise NotImplementedError
