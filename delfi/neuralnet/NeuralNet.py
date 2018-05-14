@@ -127,13 +127,14 @@ class NeuralNet(object):
                 self.layer['conv_reshape'] = ll.ReshapeLayer(last(self.layer), rs)
 
             # add layers
+            filter_sizes = [5,3,3]
             for l in range(len(n_filters)):
                 self.layer['conv_' + str(l + 1)] = ll.Conv2DLayer(
                     name='c' + str(l + 1),
                     incoming=last(self.layer),
                     num_filters=n_filters[l],
-                    filter_size=3,
-                    stride=(2, 2),
+                    filter_size=filter_sizes[l],
+                    stride=(1,1),
                     pad=0,
                     untie_biases=False,
                     W=lasagne.init.GlorotUniform(),
@@ -141,6 +142,14 @@ class NeuralNet(object):
                     nonlinearity=lnl.rectify,
                     flip_filters=True,
                     convolution=tt.nnet.conv2d)
+
+                if l < 2:
+                    self.layer['pool_' + str(l + 1)] = ll.MaxPool2DLayer(
+                        name='p' + str(l+1),
+                        incoming=last(self.layer),
+                        pool_size=2, 
+                        stride=None, 
+                        ignore_border=True)
 
         # flatten
         self.layer['flatten'] = ll.FlattenLayer(
