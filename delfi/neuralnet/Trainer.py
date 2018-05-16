@@ -82,6 +82,8 @@ class Trainer:
             self.trn_outputs_names += monitor_names
             self.trn_outputs_nodes += monitor_nodes
 
+        print(self.trn_inputs)
+
         # function for single update
         self.make_update = theano.function(
             inputs=self.trn_inputs,
@@ -159,6 +161,11 @@ class Trainer:
                 for trn_batch in iterate_minibatches(self.trn_data, minibatch,
                                                      seed=self.gen_newseed()):
                     trn_batch = tuple(trn_batch)
+
+                    # hacky
+                    th,x,iws = trn_batch
+                    x,x_extra = x[:,:-1].reshape(-1,1,21,21), x[:,-1:]
+                    trn_batch = (th, x, x_extra, iws)
 
                     outputs = self.make_update(*trn_batch)
 

@@ -277,7 +277,7 @@ class SNPE(BaseInference):
                 iws = np.ones((n_train_round,))
 
             trn_data = (trn_data[0], trn_data[1], iws)
-            trn_inputs = [self.network.params, self.network.stats,
+            trn_inputs = [self.network.params, self.network.stats, self.network.extra_stats,
                           self.network.iws]
 
             if init_single_layer_net:

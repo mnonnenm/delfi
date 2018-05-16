@@ -19,7 +19,7 @@ def MyLogSumExp(x, axis=None):
 class NeuralNet(object):
     def __init__(self, n_inputs, n_outputs, n_components=1, n_filters=[],
                  n_hiddens=[10, 10], n_rnn=None, impute_missing=True, seed=None,
-                 svi=True, diag_cov=False, homoscedastic=False):
+                 svi=True, diag_cov=False, homoscedastic=False, n_inputs_hidden=None):
         """Initialize a mixture density network with custom layers
 
         Parameters
@@ -156,10 +156,20 @@ class NeuralNet(object):
             incoming=last(self.layer),
             outdim=2)
 
+        if not n_inputs_hidden is None:
+            self.extra_stats = tt.matrix('extra_stats', dtype=dtype)
+            extra_in = ll.InputLayer((None, n_inputs_hidden), 
+                                     input_var=self.extra_stats)
+            hidden_in = lasagne.layers.ConcatLayer([extra_in, last(self.layer)], 
+                                                   axis=1)
+        else:
+            hidden_in = last(self.layer)
+
+
         # hidden layers
         for l in range(len(n_hiddens)):
             self.layer['hidden_' + str(l + 1)] = dl.FullyConnectedLayer(
-                last(self.layer), n_units=n_hiddens[l],
+                hidden_in, n_units=n_hiddens[l],
                 svi=svi, name='h' + str(l + 1))
 
         last_hidden = last(self.layer)
@@ -249,16 +259,16 @@ class NeuralNet(object):
     def compile_funs(self):
         """Compiles theano functions"""
         self._f_eval_comps = theano.function(
-            inputs=[self.stats],
+            inputs=[self.stats, self.extra_stats],
             outputs=self.comps)
         self._f_eval_lprobs = theano.function(
-            inputs=[self.params, self.stats],
+            inputs=[self.params, self.stats, self.extra_stats],
             outputs=self.lprobs)
         self._f_eval_dcomps = theano.function(
-            inputs=[self.stats],
+            inputs=[self.stats, self.extra_stats],
             outputs=self.dcomps)
         self._f_eval_dlprobs = theano.function(
-            inputs=[self.params, self.stats],
+            inputs=[self.params, self.stats, self.extra_stats],
             outputs=self.dlprobs)
 
     def eval_comps(self, stats, deterministic=True):
@@ -275,10 +285,14 @@ class NeuralNet(object):
         -------
         mixing coefficients, means and scale matrices
         """
+
+        stats, extra_stats = stats[:, :-1].reshape(-1,1,21,21), stats[:,-1:]
         if deterministic:
-            return self._f_eval_dcomps(stats.astype(dtype))
+            return self._f_eval_dcomps(stats.astype(dtype),
+                                       extra_stats.astype(dtype))
         else:
-            return self._f_eval_comps(stats.astype(dtype))
+            return self._f_eval_comps(stats.astype(dtype),
+                                       extra_stats.astype(dtype))
 
     def eval_lprobs(self, params, stats, deterministic=True):
         """Evaluate log probabilities for given input-output pairs.
@@ -294,10 +308,13 @@ class NeuralNet(object):
         -------
         log probabilities : log p(params|stats)
         """
+        stats, extra_stats = stats[:, :-1].reshape(-1,1,21,21), stats[:,-1:]
         if deterministic:
-            return self._f_eval_dlprobs(params.astype(dtype), stats.astype(dtype))
+            return self._f_eval_dlprobs(params.astype(dtype), stats.astype(dtype),
+                                        extra_stats.astype(dtype))
         else:
-            return self._f_eval_lprobs(params.astype(dtype), stats.astype(dtype))
+            return self._f_eval_lprobs(params.astype(dtype), stats.astype(dtype),
+                                        extra_stats.astype(dtype))
 
     def get_mog(self, stats, deterministic=True):
         """Return the conditional MoG at location x

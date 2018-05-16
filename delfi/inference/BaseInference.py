@@ -53,7 +53,7 @@ class BaseInference(metaclass=ABCMetaDoc):
 
         # generate a sample to get input and output dimensions
         params, stats, source = generator.gen(1, skip_feedback=True, verbose=False)
-        kwargs.update({'n_inputs': stats.shape[1:],
+        kwargs.update({'n_inputs': (1,21,21),
                        'n_outputs': params.shape[1],
                        'seed': self.gen_newseed()})
 
