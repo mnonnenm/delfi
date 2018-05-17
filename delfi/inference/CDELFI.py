@@ -210,8 +210,7 @@ class CDELFI(BaseInference):
 
                     self.network.params_dict = new_params
 
-            trn_inputs = [self.network.params, self.network.stats]
-
+            trn_inputs = [self.network.params, self.network.stats, self.network.extra_stats]
             t = Trainer(self.network, self.loss(N=n_train_round),
                         trn_data=trn_data, trn_inputs=trn_inputs,
                         monitor=self.monitor_dict_from_names(monitor),

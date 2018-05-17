@@ -163,9 +163,14 @@ class Trainer:
                     trn_batch = tuple(trn_batch)
 
                     # hacky
-                    th,x,iws = trn_batch
-                    x,x_extra = x[:,:-1].reshape(-1,1,21,21), x[:,-1:]
-                    trn_batch = (th, x, x_extra, iws)
+                    if len(trn_batch)==3:
+                        th,x,iws = trn_batch
+                        x,x_extra = x[:,:-1].reshape(-1,1,21,21), x[:,-1:]
+                        trn_batch = (th, x, x_extra, iws)
+                    elif len(trn_batch)==2:
+                        th,x = trn_batch
+                        x,x_extra = x[:,:-1].reshape(-1,1,21,21), x[:,-1:]
+                        trn_batch = (th, x, x_extra)
 
                     outputs = self.make_update(*trn_batch)
 
