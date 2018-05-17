@@ -19,7 +19,8 @@ def MyLogSumExp(x, axis=None):
 class NeuralNet(object):
     def __init__(self, n_inputs, n_outputs, n_components=1, n_filters=[],
                  n_hiddens=[10, 10], n_rnn=None, impute_missing=True, seed=None,
-                 svi=True, diag_cov=False, homoscedastic=False, n_inputs_hidden=None):
+                 svi=True, diag_cov=False, homoscedastic=False, 
+                 filter_sizes = [5,3,3], pool_sizes=[2,2,2], n_inputs_hidden=None):
         """Initialize a mixture density network with custom layers
 
         Parameters
@@ -126,8 +127,9 @@ class NeuralNet(object):
             if rs is not None:
                 self.layer['conv_reshape'] = ll.ReshapeLayer(last(self.layer), rs)
 
+            assert len(filter_sizes) >= len(n_filters)
+
             # add layers
-            filter_sizes = [5,3,3]
             for l in range(len(n_filters)):
                 self.layer['conv_' + str(l + 1)] = ll.Conv2DLayer(
                     name='c' + str(l + 1),
@@ -135,7 +137,7 @@ class NeuralNet(object):
                     num_filters=n_filters[l],
                     filter_size=filter_sizes[l],
                     stride=(1,1),
-                    pad=0,
+                    pad=(filter_sizes[l]-1)//2 if pool_sizes[l]==1 else 0,
                     untie_biases=False,
                     W=lasagne.init.GlorotUniform(),
                     b=lasagne.init.Constant(0.),
@@ -143,11 +145,11 @@ class NeuralNet(object):
                     flip_filters=True,
                     convolution=tt.nnet.conv2d)
 
-                if l < 2:
+                if pool_sizes[l] > 1:
                     self.layer['pool_' + str(l + 1)] = ll.MaxPool2DLayer(
                         name='p' + str(l+1),
                         incoming=last(self.layer),
-                        pool_size=2, 
+                        pool_size=pool_sizes[l], 
                         stride=None, 
                         ignore_border=True)
 
@@ -160,16 +162,16 @@ class NeuralNet(object):
             self.extra_stats = tt.matrix('extra_stats', dtype=dtype)
             extra_in = ll.InputLayer((None, n_inputs_hidden), 
                                      input_var=self.extra_stats)
-            hidden_in = lasagne.layers.ConcatLayer([extra_in, last(self.layer)], 
+            self.layer['extra_input'] = lasagne.layers.ConcatLayer([extra_in, last(self.layer)], 
                                                    axis=1)
-        else:
-            hidden_in = last(self.layer)
 
+        else:
+            pass
 
         # hidden layers
         for l in range(len(n_hiddens)):
             self.layer['hidden_' + str(l + 1)] = dl.FullyConnectedLayer(
-                hidden_in, n_units=n_hiddens[l],
+                last(self.layer), n_units=n_hiddens[l], actfun=lnl.rectify,
                 svi=svi, name='h' + str(l + 1))
 
         last_hidden = last(self.layer)
