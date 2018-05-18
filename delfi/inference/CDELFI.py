@@ -228,7 +228,7 @@ class CDELFI(BaseInference):
 
         return logs, trn_datasets, posteriors
 
-    def predict(self, x):
+    def predict(self, x, threshold=0.05):
         """Predict posterior given x
 
         Parameters
@@ -243,6 +243,8 @@ class CDELFI(BaseInference):
             # mog is posterior given proposal prior
             mog = super(CDELFI, self).predict(x)  # via super
 
+            mog.prune_negligible_components(threshold=threshold)
+
             # compute posterior given prior by analytical division step
             if 'Uniform' in str(type(self.generator.prior)):
                 posterior = mog / self.generator.proposal
@@ -253,3 +255,21 @@ class CDELFI(BaseInference):
                 raise NotImplemented
 
             return posterior
+
+
+    def predict_uncorrected(self, x):
+            """Predict posterior given x under proposal prior
+
+            Predicts the uncorrected posterior associated with the proposal
+            prior (versus the original prior). 
+
+            Allows to obtain some posterior estimates when the analytical 
+            correction for the proposal prior fails. 
+
+            Parameters
+            ----------
+            x : array
+                Stats for which to compute the posterior
+            """
+
+            return super(CDELFI, self).predict(x)  # via super
