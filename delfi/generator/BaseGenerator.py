@@ -131,24 +131,30 @@ class BaseGenerator(metaclass=ABCMetaDoc):
                 # run forward model for all params, each n_reps times
                 result = self.model.gen(params_batch, n_reps=n_reps, pbar=pbar)
 
-                stats, params, sources = self.process_batch(params_batch, sources_batch, result)
+                stats, params, sources = self.process_batch(params_batch, 
+                    sources_batch, result, skip_feedback=skip_feedback)
                 final_sources += sources
                 final_params += params
                 final_stats += stats
 
         # TODO: for n_reps > 1 duplicate params; reshape stats array
 
+        print('final_params', len(final_params))
+        print('final_sources', len(final_sources))
+        print('final_stats', len(final_stats))
+
         # n_samples x n_reps x dim theta
         params = np.array(final_params)
         sources = np.array(final_sources)
 
         # n_samples x n_reps x dim summary stats
+
         stats = np.array(final_stats)
         stats = stats.squeeze(axis=1)
 
         return params, stats, sources
 
-    def process_batch(self, params_batch, sources_batch, result):
+    def process_batch(self, params_batch, sources_batch, result, skip_feedback=False):
         ret_stats = []
         ret_params = []
         ret_sources = []
