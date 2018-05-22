@@ -11,7 +11,9 @@ dtype = theano.config.floatX
 class BaseInference(metaclass=ABCMetaDoc):
     def __init__(self, generator, 
                  prior_norm=True,  
+                 init_norm=False,
                  pilot_samples=100,
+                 reinit_weights=False, 
                  seed=None, verbose=True, **kwargs):
         """Abstract base class for inference algorithms
 
@@ -50,6 +52,13 @@ class BaseInference(metaclass=ABCMetaDoc):
         # bind generator, reset proposal attribute
         self.generator = generator
         self.generator.proposal = None
+
+        self.reinit_weights = reinit_weights
+
+        # optional: z-transform output for obs (also re-centres x onto obs!)
+        self.init_norm      = init_norm
+        self.init_fcv = 0.8 if self.n_components > 1 else 0.
+        self.norm_init()
 
         # generate a sample to get input and output dimensions
         params, stats, source = generator.gen(1, skip_feedback=True, verbose=False)
@@ -98,8 +107,13 @@ class BaseInference(metaclass=ABCMetaDoc):
         """Reinitializes the network instance (re-setting the weights!) 
 
         """
-        self.network = NeuralNet(**self.kwargs)
-        self.svi = self.network.svi
+        if self.reinit_weights:
+            print('re-initializing network weights')
+            self.network = NeuralNet(**self.kwargs)
+            self.svi = self.network.svi
+
+            self.norm_init()
+
 
     def centre_on_obs(self):
         """ Centres first-layer input onto observed summary statistics 
@@ -178,6 +192,14 @@ class BaseInference(metaclass=ABCMetaDoc):
             val = diag_mask * (val - np.diag(np.log(Z1inv))) + triu_mask * val.dot(np.diag(1./Z1inv))
             b.set_value(val.flatten())
 
+
+    def norm_init(self): 
+        if self.init_norm:
+            print('standardizing network initialization')
+            if self.network.n_components > 1:
+                self.standardize_init(fcv = self.init_fcv)
+            else:
+                self.standardize_init(fcv = 0.)
 
     def standardize_init(self, fcv = 0.8):
         """ Standardizes the network initialization on obs

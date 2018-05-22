@@ -7,12 +7,21 @@ from delfi.neuralnet.NeuralNet import NeuralNet
 from delfi.neuralnet.Trainer import Trainer
 from delfi.neuralnet.loss.regularizer import svi_kl_zero
 
+def per_round(y):
+
+    if type(y) == list:
+        try:
+            y_round = y[r-1]
+        except:
+            y_round = y[-1]
+    else:
+        y_round = y
+
+    return y_round
 
 class CDELFI(BaseInference):
-    def __init__(self, generator, obs, prior_norm=False, init_norm=False,
-                 pilot_samples=100,
-                 n_components=1, reg_lambda=0.01, seed=None, verbose=True,
-                 reinit_weights=False, **kwargs):
+    def __init__(self, generator, obs, n_components=1, reg_lambda=0.01, 
+                 **kwargs):
         """Conditional density estimation likelihood-free inference (CDE-LFI)
 
         Implementation of algorithms 1 and 2 of Papamakarios and Murray, 2016.
@@ -54,29 +63,17 @@ class CDELFI(BaseInference):
         # Algorithm 1 of PM requires a single component
         kwargs.update({'n_components': 1})
 
-        super().__init__(generator, prior_norm=prior_norm,
-                         pilot_samples=pilot_samples, seed=seed,
-                         verbose=verbose, **kwargs)
-
+        self.n_components = 1
+        super().__init__(generator, **kwargs)
         self.n_components = n_components
+
         self.obs = obs
-
-        # optional: z-transform output for obs (also re-centres x onto obs!)
-        self.init_norm = init_norm
-        self.init_fcv = 0.8 if self.n_components > 1 else 0.
-        if self.init_norm:
-            print('standardizing network initialization')
-            if self.network.n_components > 1:
-                self.standardize_init(fcv = self.init_fcv)
-            else:
-                self.standardize_init(fcv = 0.)
-
-        self.reinit_weights = reinit_weights
 
         if np.any(np.isnan(self.obs)):
             raise ValueError("Observed data contains NaNs")
 
         self.reg_lambda = reg_lambda
+        self.round = 0 # total round counter
 
     def loss(self, N):
         """Loss function for training
@@ -142,75 +139,32 @@ class CDELFI(BaseInference):
         posteriors = []
 
         for r in range(1, n_rounds + 1):  # start at 1
-            # if round > 1, set new proposal distribution before sampling
 
-            if r > 1:
+            self.round += 1
+
+            if self.round > 1:
                 # posterior becomes new proposal prior
                 posterior = self.predict(self.obs)
                 self.generator.proposal = posterior.project_to_gaussian()
 
-                if self.reinit_weights:
-                    print('re-initializing network weights')
-                    self.reinit_network()
-                    if self.init_norm:
-                        print('standardizing network initialization')
-                        if self.network.n_components > 1:
-                            self.standardize_init(fcv = self.init_fcv)
-                        else:
-                            self.standardize_init(fcv = 0.)
-
             # number of training examples for this round
-            if type(n_train) == list:
-                try:
-                    n_train_round = n_train[r-1]
-                except:
-                    n_train_round = n_train[-1]
-            else:
-                n_train_round = n_train
-
-            if type(epochs) == list:
-                try:
-                    epochs_round = epochs[r-1]
-                except:
-                    epochs_round = epochs[-1]
-            else:
-                epochs_round = epochs
-
+            epochs_round = per_round(epochs)
+            n_train_round = per_round(n_train)
 
             # draw training data (z-transformed params and stats)
-            verbose = '(round {}) '.format(r) if self.verbose else False
+            verbose = '(round {}) '.format(self.round) if self.verbose else False
             trn_data = self.gen(n_train_round, verbose=verbose)[:2]
 
-            # algorithm 2 of Papamakarios and Murray
-            if r == n_rounds and self.n_components > 1:
+            if r == n_rounds: 
+                self.kwargs.update({'n_components': self.n_components})
+            if r > 1:
+                self.reinit_network()   # reinits network if flat is set
+                self.split_components() # splits component if final round
 
-                if self.reinit_weights:
-                    print('re-initializing network weights')
-                    self.kwargs.update({'n_components': self.n_components})
-                    self.reinit_network()                                    
-                    if self.init_norm:
-                        print('standardizing network initialization')
-                        self.standardize_init(fcv = self.init_fcv)
-                else:
-                    # get parameters of current network
-                    old_params = self.network.params_dict.copy()
+            trn_inputs = [self.network.params, 
+                          self.network.stats, 
+                          self.network.extra_stats]
 
-                    # create new network
-                    network_spec = self.network.spec_dict.copy()
-                    network_spec.update({'n_components': self.n_components})
-                    self.network = NeuralNet(**network_spec)
-                    new_params = self.network.params_dict
-
-                    # set weights of new network
-                    # weights of additional components are duplicates
-                    for p in [s for s in new_params if 'means' in s or
-                              'precisions' in s]:
-                        new_params[p] = old_params[p[:-1] + '0']
-                        new_params[p] += 1.0e-6*self.rng.randn(*new_params[p].shape)
-
-                    self.network.params_dict = new_params
-
-            trn_inputs = [self.network.params, self.network.stats, self.network.extra_stats]
             t = Trainer(self.network, self.loss(N=n_train_round),
                         trn_data=trn_data, trn_inputs=trn_inputs,
                         monitor=self.monitor_dict_from_names(monitor),
@@ -235,6 +189,8 @@ class CDELFI(BaseInference):
         ----------
         x : array
             Stats for which to compute the posterior
+        threshold: float
+            Threshold for pruning MoG components (percent of posterior mass)
         """
         if self.generator.proposal is None:
             # no correction necessary
@@ -273,3 +229,25 @@ class CDELFI(BaseInference):
             """
 
             return super(CDELFI, self).predict(x)  # via super
+
+
+    def split_components(self):
+
+        if self.n_components > 1:
+            # get parameters of current network
+            old_params = self.network.params_dict.copy()
+
+            # create new network
+            network_spec = self.network.spec_dict.copy()
+            network_spec.update({'n_components': self.n_components})
+            self.network = NeuralNet(**network_spec)
+            new_params = self.network.params_dict
+
+            # set weights of new network
+            # weights of additional components are duplicates
+            for p in [s for s in new_params if 'means' in s or
+                      'precisions' in s]:
+                new_params[p] = old_params[p[:-1] + '0']
+                new_params[p] += 1.0e-6*self.rng.randn(*new_params[p].shape)
+
+            self.network.params_dict = new_params

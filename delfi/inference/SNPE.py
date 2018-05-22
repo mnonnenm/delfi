@@ -11,12 +11,22 @@ import lasagne.layers as ll
 
 dtype = theano.config.floatX
 
+def per_round(y):
+
+    if type(y) == list:
+        try:
+            y_round = y[r-1]
+        except:
+            y_round = y[-1]
+    else:
+        y_round = y
+
+    return y_round
 
 class SNPE(BaseInference):
-    def __init__(self, generator, obs, prior_norm=False, init_norm=False,
-                 pilot_samples=100, convert_to_T=3, 
-                 reg_lambda=0.01, prior_mixin=0., seed=None, verbose=True,
-                 reinit_weights=False, **kwargs):
+    def __init__(self, generator, obs, convert_to_T=3, 
+                 reg_lambda=0.01, prior_mixin=0., 
+                 **kwargs):
         """Sequential neural posterior estimation (SNPE)
 
         Parameters
@@ -60,26 +70,15 @@ class SNPE(BaseInference):
             Dictionary containing theano variables that can be monitored while
             training the neural network.
         """
-        super().__init__(generator, prior_norm=prior_norm,
-                         pilot_samples=pilot_samples, seed=seed,
-                         verbose=verbose, **kwargs)
+        super().__init__(generator, **kwargs)
 
         self.obs = obs
-
-        # optional: z-transform output for obs (also re-centres x onto obs!)
-        self.init_norm = init_norm
-        self.init_fcv = 0.8 if self.network.n_components > 1 else 0.
-        if self.init_norm:
-            print('standardizing network initialization')
-            self.standardize_init(fcv = self.init_fcv)
 
         self.reg_lambda = reg_lambda
         self.round = 0
         self.convert_to_T = convert_to_T
 
         self.prior_mixin = 0. if prior_mixin is None else prior_mixin
-
-        self.reinit_weights = reinit_weights
 
         # placeholder for importance weights
         self.network.iws = tt.vector('iws', dtype=dtype)
@@ -184,29 +183,12 @@ class SNPE(BaseInference):
 
                 self.generator.proposal = proposal
 
-            if self.round > 1 and self.reinit_weights:
-                print('re-initializing network weights')
+            if self.round > 1:
                 self.reinit_network()                
-                if self.init_norm:
-                    print('standardizing network initialization')
-                    self.standardize_init(fcv = self.init_fcv)
 
             # number of training examples for this round
-            if type(n_train) == list:
-                try:
-                    n_train_round = n_train[self.round-1]
-                except:
-                    n_train_round = n_train[-1]
-            else:
-                n_train_round = n_train
-
-            if type(epochs) == list:
-                try:
-                    epochs_round = epochs[self.round-1]
-                except:
-                    epochs_round = epochs[-1]
-            else:
-                epochs_round = epochs
+            epochs_round = per_round(epochs)
+            n_train_round = per_round(n_train)
 
             epochs_cbk_round = epochs_round if epochs_cbk is None else epochs_cbk
 
