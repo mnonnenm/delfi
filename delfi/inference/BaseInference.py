@@ -10,10 +10,8 @@ dtype = theano.config.floatX
 
 class BaseInference(metaclass=ABCMetaDoc):
     def __init__(self, generator, 
-                 prior_norm=True,  
-                 init_norm=False,
-                 pilot_samples=100,
-                 reinit_weights=False, 
+                 prior_norm=True, init_norm=False,
+                 pilot_samples=100, reinit_weights=False, 
                  seed=None, verbose=True, **kwargs):
         """Abstract base class for inference algorithms
 
@@ -56,7 +54,7 @@ class BaseInference(metaclass=ABCMetaDoc):
         self.reinit_weights = reinit_weights
 
         # optional: z-transform output for obs (also re-centres x onto obs!)
-        self.init_norm      = init_norm
+        self.init_norm = init_norm
         self.init_fcv = 0.8 if self.n_components > 1 else 0.
         self.norm_init()
 
