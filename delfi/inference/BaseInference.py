@@ -293,10 +293,25 @@ class BaseInference(metaclass=ABCMetaDoc):
     def pilot_run(self, n_samples):
         """Pilot run in order to find parameters for z-scoring stats
         """
+
         verbose = '(pilot run) ' if self.verbose else False
         params, stats, sources = self.generator.gen(n_samples, verbose=verbose)
-        self.stats_mean = np.nanmean(stats, axis=0).reshape((1, *stats.shape[1:]))
-        self.stats_std = np.nanstd(stats, axis=0).reshape((1, *stats.shape[1:]))
+        if 'n_inputs_hidden' in self.kwargs:
+
+            n_inputs_hidden = self.kwargs['n_inputs_hidden']
+            n_inputs = np.prod(self.kwargs['n_inputs'])
+
+            self.stats_mean = np.zeros((1,n_inputs+n_inputs_hidden))
+            self.stats_std = np.ones((1,n_inputs+n_inputs_hidden))
+
+            # assuming inputs directly to hidden units to come *last* in stats
+            idx = np.arange(n_inputs_hidden) + n_inputs
+
+            self.stats_mean[0,idx] = np.nanmean(stats[:,idx], axis=0)
+            self.stats_std[ 0,idx] = np.nanstd( stats[:,idx], axis=0)
+        else:
+            self.stats_mean = np.nanmean(stats, axis=0).reshape((1, *stats.shape[1:]))
+            self.stats_std = np.nanstd(stats, axis=0).reshape((1, *stats.shape[1:]))
 
     def predict(self, x, deterministic=True):
         """Predict posterior given x
