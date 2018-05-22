@@ -233,6 +233,7 @@ class CDELFI(BaseInference):
 
     def split_components(self):
 
+        assert self.network.n_components == 1
         if self.n_components > 1:
             # get parameters of current network
             old_params = self.network.params_dict.copy()
