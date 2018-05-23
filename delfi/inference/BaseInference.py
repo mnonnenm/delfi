@@ -53,11 +53,6 @@ class BaseInference(metaclass=ABCMetaDoc):
 
         self.reinit_weights = reinit_weights
 
-        # optional: z-transform output for obs (also re-centres x onto obs!)
-        self.init_norm = init_norm
-        self.init_fcv = 0.8 if self.n_components > 1 else 0.
-        self.norm_init()
-
         # generate a sample to get input and output dimensions
         params, stats, source = generator.gen(1, skip_feedback=True, verbose=False)
         kwargs.update({'n_inputs': (1,21,21),
@@ -67,6 +62,12 @@ class BaseInference(metaclass=ABCMetaDoc):
         self.network = NeuralNet(**kwargs)
         self.svi = self.network.svi
         self.kwargs = kwargs
+
+        # optional: z-transform output for obs (also re-centres x onto obs!)
+        self.init_norm = init_norm
+        self.init_fcv = 0.8 if self.network.n_components > 1 else 0.
+        self.norm_init()
+
 
         # parameters for z-transform of params
         if prior_norm:
