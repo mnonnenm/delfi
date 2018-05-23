@@ -20,7 +20,7 @@ def per_round(y):
     return y_round
 
 class CDELFI(BaseInference):
-    def __init__(self, generator, obs, n_components=1, reg_lambda=0.01, 
+    def __init__(self, generator, obs, reg_lambda=0.01, 
                  **kwargs):
         """Conditional density estimation likelihood-free inference (CDE-LFI)
 
@@ -39,8 +39,6 @@ class CDELFI(BaseInference):
             samples is run. The mean and std of the summary statistics of the
             pilot samples will be subsequently used to z-transform summary
             statistics.
-        n_components : int
-            Number of components in final round (PM's algorithm 2)
         reg_lambda : float
             Precision parameter for weight regularizer if svi is True
         seed : int or None
@@ -61,11 +59,9 @@ class CDELFI(BaseInference):
             training the neural network.
         """
         # Algorithm 1 of PM requires a single component
-        kwargs.update({'n_components': 1})
-
-        self.n_components = 1
+        if 'n_components' in kwargs:
+            assert kwargs['n_components'] == 1 # moved n_components argument to run()
         super().__init__(generator, **kwargs)
-        self.n_components = n_components
 
         self.obs = obs
         if np.any(np.isnan(self.obs)):
@@ -101,7 +97,7 @@ class CDELFI(BaseInference):
         return loss
 
     def run(self, n_train=100, n_rounds=2, epochs=100, minibatch=50,
-            monitor=None, **kwargs):
+            monitor=None, n_components=1, **kwargs):
         """Run algorithm
 
         Parameters
@@ -121,6 +117,8 @@ class CDELFI(BaseInference):
             Names of variables to record during training along with the value
             of the loss function. The observables attribute contains all
             possible variables that can be monitored
+        n_components : int
+            Number of components in final round (if > 1, gives PM's algorithm 2)
         kwargs : additional keyword arguments
             Additional arguments for the Trainer instance
 
@@ -136,6 +134,9 @@ class CDELFI(BaseInference):
         logs = []
         trn_datasets = []
         posteriors = []
+
+        assert self.kwargs['n_components'] == 1 
+        # could also allow to go back to single Gaussian via project_to_Gaussian()
 
         for r in range(1, n_rounds + 1):  # start at 1
 
@@ -155,10 +156,11 @@ class CDELFI(BaseInference):
             trn_data = self.gen(n_train_round, verbose=verbose)[:2]
 
             if r == n_rounds: 
-                self.kwargs.update({'n_components': self.n_components})
+                self.kwargs.update({'n_components': n_components})
+                self.split_components()
+
             if r > 1:
-                self.reinit_network()   # reinits network if flat is set
-                self.split_components() # splits component if final round
+                self.reinit_network() # reinits network if flag is set
 
             trn_inputs = [self.network.params, 
                           self.network.stats, 
@@ -233,14 +235,12 @@ class CDELFI(BaseInference):
     def split_components(self):
 
         assert self.network.n_components == 1
-        if self.n_components > 1:
+        if self.kwargs['n_components'] > 1:
             # get parameters of current network
             old_params = self.network.params_dict.copy()
 
             # create new network
-            network_spec = self.network.spec_dict.copy()
-            network_spec.update({'n_components': self.n_components})
-            self.network = NeuralNet(**network_spec)
+            self.network = NeuralNet(**self.kwargs)
             new_params = self.network.params_dict
 
             # set weights of new network
