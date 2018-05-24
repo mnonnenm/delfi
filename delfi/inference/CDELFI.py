@@ -19,6 +19,10 @@ def per_round(y):
 
     return y_round
 
+def logdet(M):
+    slogdet = np.linalg.slogdet(M)
+    return slogdet[0] * slogdet[1]
+
 class CDELFI(BaseInference):
     def __init__(self, generator, obs, reg_lambda=0.01, 
                  **kwargs):
@@ -135,8 +139,8 @@ class CDELFI(BaseInference):
         trn_datasets = []
         posteriors = []
 
-        assert self.kwargs['n_components'] == 1 
-        # could also allow to go back to single Gaussian via project_to_Gaussian()
+        #assert self.kwargs['n_components'] == 1 
+        # could also allow to go back to single Gaussian via project_to_gaussian()
 
         for r in range(1, n_rounds + 1):  # start at 1
 
@@ -144,8 +148,10 @@ class CDELFI(BaseInference):
 
             if self.round > 1:
                 # posterior becomes new proposal prior
-                posterior = self.predict(self.obs)
-                self.generator.proposal = posterior.project_to_gaussian()
+                proposal = self.predict(self.obs)
+                if isinstance(proposal, dd.MoG) and len(proposal.xs) == 1:  
+                    proposal = proposal.project_to_gaussian()               
+                self.generator.proposal = proposal 
 
             # number of training examples for this round
             epochs_round = per_round(epochs)
@@ -174,16 +180,24 @@ class CDELFI(BaseInference):
                                 verbose=verbose))
             trn_datasets.append(trn_data)
 
-            try:
-                posteriors.append(self.predict(self.obs))
-            except:
-                posteriors.append(None)
-                print('analytic correction for proposal seemingly failed!')
-                break
+            if self.round==1 or isinstance(self.generator.proposal, (dd.Uniform,dd.Gaussian)):  
+                posterior = self.predict(self.obs)
+            elif len(self.generator.proposal.xs) == n_components:                    
+                print('correcting for MoG proposal')
+                posterior = self.predict_from_MoG_prop(self.obs)
+            else:
+                raise NotImplementedError
+
+            posteriors.append(posterior)
+
+            #except:
+            #    posteriors.append(None)
+            #    print('analytic correction for proposal seemingly failed!')
+            #    break
 
         return logs, trn_datasets, posteriors
 
-    def predict(self, x, threshold=0.05):
+    def predict(self, x, threshold=0.01):
         """Predict posterior given x
 
         Parameters
@@ -213,6 +227,56 @@ class CDELFI(BaseInference):
 
             return posterior
 
+    def predict_from_MoG_prop(self, x, threshold=0.01):
+        """Predict posterior given x
+
+        Parameters
+        ----------
+        x : array
+            Stats for which to compute the posterior
+        threshold: float
+            Threshold for pruning MoG components (percent of posterior mass)
+        """
+        # mog is posterior given proposal prior
+        mog = super(CDELFI, self).predict(x)  # via super
+        mog.prune_negligible_components(threshold=threshold)
+
+        prop  = self.generator.proposal
+        prior = self.generator.prior
+        ldetP0, d0  = logdet(prior.P), prior.m.dot(prior.Pm)
+        means = np.vstack([c.m for c in prop.xs])
+
+        xs_new, a_new = [], []
+        for c in mog.xs:
+
+            dists = np.sum( (means - np.atleast_2d(c.m))**2, axis=1)
+            i = np.argmin(dists)
+
+            c_prop = prop.xs[i]
+            a_prop = prop.a[i]
+
+            c_post = (c * prior) / c_prop
+
+            # prefactors
+            log_a = np.log(mog.a[i]) - np.log(a_prop) 
+            # determinants
+            log_a += 0.5 * (logdet(c.P)+ldetP0-logdet(c_prop.P)-logdet(c_post.P))
+            # Mahalanobis distances
+            log_a -= 0.5 * c.m.dot(c.Pm)
+            log_a -= 0.5 * d0
+            log_a += 0.5 * c_prop.m.dot(c_prop.Pm)
+            log_a += 0.5 * c_post.m.dot(c_post.Pm)
+            
+            a_i = np.exp(log_a)
+            
+            xs_new.append(c_post)
+            a_new.append(a_i)
+
+        a_new = np.array(a_new)
+        a_new /= a_new.sum()
+
+        return dd.MoG( xs = xs_new, a = a_new )
+
 
     def predict_uncorrected(self, x):
             """Predict posterior given x under proposal prior
@@ -234,8 +298,7 @@ class CDELFI(BaseInference):
 
     def split_components(self):
 
-        assert self.network.n_components == 1
-        if self.kwargs['n_components'] > 1:
+        if self.network.n_components == 1 and self.kwargs['n_components'] > 1:
             # get parameters of current network
             old_params = self.network.params_dict.copy()
 
