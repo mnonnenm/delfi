@@ -148,7 +148,7 @@ class CDELFI(BaseInference):
 
             if self.round > 1:
                 # posterior becomes new proposal prior
-                if isinstance(self.generator.proposal, (dd.Uniform,dd.Gaussian)):  
+                if self.round==2 or isinstance(self.generator.proposal, (dd.Uniform,dd.Gaussian)):  
                     proposal = self.predict(self.obs)
                 elif len(self.generator.proposal.xs) == n_components:                    
                     print('correcting for MoG proposal')
