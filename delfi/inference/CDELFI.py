@@ -148,7 +148,14 @@ class CDELFI(BaseInference):
 
             if self.round > 1:
                 # posterior becomes new proposal prior
-                proposal = self.predict(self.obs)
+                if isinstance(self.generator.proposal, (dd.Uniform,dd.Gaussian)):  
+                    proposal = self.predict(self.obs)
+                elif len(self.generator.proposal.xs) == n_components:                    
+                    print('correcting for MoG proposal')
+                    proposal = self.predict_from_MoG_prop(self.obs)
+                else:
+                    raise NotImplementedError
+
                 if isinstance(proposal, dd.MoG) and len(proposal.xs) == 1:  
                     proposal = proposal.project_to_gaussian()               
                 self.generator.proposal = proposal 
