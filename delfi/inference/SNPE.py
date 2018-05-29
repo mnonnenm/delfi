@@ -259,8 +259,12 @@ class SNPE(BaseInference):
                 iws = np.ones((n_train_round,))
 
             trn_data = (trn_data[0], trn_data[1], iws)
-            trn_inputs = [self.network.params, self.network.stats, self.network.extra_stats,
-                          self.network.iws]
+
+            if hasattr(self.network, 'extra_stats'):
+                trn_inputs = [self.network.params, self.network.stats, self.network.extra_stats,
+                              self.network.iws]
+            else:
+                trn_inputs = [self.network.params, self.network.stats, self.network.iws]
 
             if init_single_layer_net:
                 print('initializing network from homoscedastic linear-affine fit')
@@ -277,7 +281,9 @@ class SNPE(BaseInference):
                         monitor=self.monitor_dict_from_names(monitor),
                         **kwargs)
             logs.append(t.train(epochs=epochs_round, minibatch=minibatch,
-                                verbose=verbose, stop_on_nan=stop_on_nan))
+                                verbose=verbose, stop_on_nan=stop_on_nan,
+                                n_inputs=self.network.n_inputs,
+                                n_inputs_hidden=self.network.n_inputs_hidden))
 
             logs[-1]['cbkrnl'] = cbkrnl
             logs[-1]['cbk_loss'] = cbl

@@ -100,7 +100,9 @@ class Trainer:
               monitor_every=None,
               stop_on_nan=False,
               tol=None,
-              verbose=False):
+              verbose=False,
+              n_inputs=None,
+              n_inputs_hidden=0):
         """Trains the model
 
         Parameters
@@ -150,6 +152,29 @@ class Trainer:
                 desc += verbose
             pbar.set_description(desc)
 
+
+        if not n_inputs is None and n_inputs_hidden > 0:
+            def split_stats(trn_batch):
+   
+                if len(trn_batch)==3:
+                    th,x,iws = trn_batch
+                    trn_batch = (th, 
+                                 x[:,:-n_inputs_hidden].reshape(-1,*n_inputs),
+                                 x[:,-n_inputs_hidden:],
+                                 iws)
+
+                elif len(trn_batch)==2:
+                    th,x = trn_batch
+                    trn_batch = (th, 
+                                 x[:,:-n_inputs_hidden].reshape(-1,*n_inputs), 
+                                 x[:,-n_inputs_hidden:])
+
+                return trn_batch
+        else:
+            def split_stats(trn_batch):
+                return trn_batch
+
+
         with pbar:
             # loop over epochs
             for epoch in range(epochs):
@@ -162,15 +187,8 @@ class Trainer:
                                                      seed=self.gen_newseed()):
                     trn_batch = tuple(trn_batch)
 
-                    # hacky
-                    if len(trn_batch)==3:
-                        th,x,iws = trn_batch
-                        x,x_extra = x[:,:-1].reshape(-1,1,21,21), x[:,-1:]
-                        trn_batch = (th, x, x_extra, iws)
-                    elif len(trn_batch)==2:
-                        th,x = trn_batch
-                        x,x_extra = x[:,:-1].reshape(-1,1,21,21), x[:,-1:]
-                        trn_batch = (th, x, x_extra)
+                    # split stats into (stats, extra_stats) if needed
+                    trn_batch = split_stats(trn_batch)
 
                     outputs = self.make_update(*trn_batch)
 

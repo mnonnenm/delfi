@@ -175,16 +175,19 @@ class CDELFI(BaseInference):
             if r > 1:
                 self.reinit_network() # reinits network if flag is set
 
-            trn_inputs = [self.network.params, 
-                          self.network.stats, 
-                          self.network.extra_stats]
+
+            if hasattr(self.network, 'extra_stats'):
+                trn_inputs = [self.network.params, self.network.stats, self.network.extra_stats]
+            else:
+                trn_inputs = [self.network.params, self.network.stats]
 
             t = Trainer(self.network, self.loss(N=n_train_round),
                         trn_data=trn_data, trn_inputs=trn_inputs,
                         monitor=self.monitor_dict_from_names(monitor),
                         seed=self.gen_newseed(), **kwargs)
             logs.append(t.train(epochs=epochs_round, minibatch=minibatch,
-                                verbose=verbose))
+                                verbose=verbose,n_inputs=self.network.n_inputs,
+                                n_inputs_hidden=self.network.n_inputs_hidden))
             trn_datasets.append(trn_data)
 
             if self.round==1 or isinstance(self.generator.proposal, (dd.Uniform,dd.Gaussian)):  

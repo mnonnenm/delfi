@@ -54,6 +54,8 @@ class NeuralNet(object):
         self.n_outputs = n_outputs
         self.svi = svi
 
+        self.n_inputs_hidden = 0 if n_inputs_hidden is None else n_inputs_hidden
+
         self.iws = tt.vector('iws', dtype=dtype)
         if n_rnn is None:
             self.n_rnn = 0
@@ -260,17 +262,23 @@ class NeuralNet(object):
 
     def compile_funs(self):
         """Compiles theano functions"""
+
+        if self.n_inputs_hidden > 0: 
+            stats = [self.stats, self.extra_stats]
+        else:
+            stats = [self.stats]
+
         self._f_eval_comps = theano.function(
-            inputs=[self.stats, self.extra_stats],
+            inputs=stats,
             outputs=self.comps)
         self._f_eval_lprobs = theano.function(
-            inputs=[self.params, self.stats, self.extra_stats],
+            inputs=[self.params, *stats],
             outputs=self.lprobs)
         self._f_eval_dcomps = theano.function(
-            inputs=[self.stats, self.extra_stats],
+            inputs=stats,
             outputs=self.dcomps)
         self._f_eval_dlprobs = theano.function(
-            inputs=[self.params, self.stats, self.extra_stats],
+            inputs=[self.params, *stats],
             outputs=self.dlprobs)
 
     def eval_comps(self, stats, deterministic=True):
@@ -287,14 +295,17 @@ class NeuralNet(object):
         -------
         mixing coefficients, means and scale matrices
         """
+        n, d = self.n_inputs_hidden, self.n_inputs
+        if self.n_inputs_hidden > 0: 
+            input_stats = [stats[:,:-n].reshape(-1,*d).astype(dtype),
+                           stats[:,-n:].astype(dtype)]
+        else: 
+            input_stats = [stats.astype(dtype)]
 
-        stats, extra_stats = stats[:, :-1].reshape(-1,1,21,21), stats[:,-1:]
         if deterministic:
-            return self._f_eval_dcomps(stats.astype(dtype),
-                                       extra_stats.astype(dtype))
+            return self._f_eval_dcomps(*input_stats)
         else:
-            return self._f_eval_comps(stats.astype(dtype),
-                                       extra_stats.astype(dtype))
+            return self._f_eval_comps(*input_stats)
 
     def eval_lprobs(self, params, stats, deterministic=True):
         """Evaluate log probabilities for given input-output pairs.
@@ -310,13 +321,17 @@ class NeuralNet(object):
         -------
         log probabilities : log p(params|stats)
         """
-        stats, extra_stats = stats[:, :-1].reshape(-1,1,21,21), stats[:,-1:]
+        n, d = self.n_inputs_hidden, self.n_inputs
+        if self.n_inputs_hidden > 0: 
+            input_stats = [stats[:,:-n].reshape(-1,*d).astype(dtype),
+                           stats[:,-n:].astype(dtype)]
+        else: 
+            input_stats = [stats.astype(dtype)]
+
         if deterministic:
-            return self._f_eval_dlprobs(params.astype(dtype), stats.astype(dtype),
-                                        extra_stats.astype(dtype))
+            return self._f_eval_dlprobs(params.astype(dtype), *input_stats)
         else:
-            return self._f_eval_lprobs(params.astype(dtype), stats.astype(dtype),
-                                        extra_stats.astype(dtype))
+            return self._f_eval_lprobs(params.astype(dtype), *input_stats)
 
     def get_mog(self, stats, deterministic=True):
         """Return the conditional MoG at location x
