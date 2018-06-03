@@ -306,21 +306,35 @@ class CDELFI(BaseInference):
             return super(CDELFI, self).predict(x)  # via super
 
 
-    def split_components(self):
+    def split_components(self, split_mode=None):
 
         if self.network.n_components == 1 and self.kwargs['n_components'] > 1:
-            # get parameters of current network
-            old_params = self.network.params_dict.copy()
 
-            # create new network
-            self.network = NeuralNet(**self.kwargs)
-            new_params = self.network.params_dict
+            if split_mode is None:
+                # get parameters of current network
+                old_params = self.network.params_dict.copy()
 
-            # set weights of new network
-            # weights of additional components are duplicates
-            for p in [s for s in new_params if 'means' in s or
-                      'precisions' in s]:
-                new_params[p] = old_params[p[:-1] + '0']
-                new_params[p] += 1.0e-6*self.rng.randn(*new_params[p].shape)
+                # create new network
+                self.network = NeuralNet(**self.kwargs)
+                new_params = self.network.params_dict
 
-            self.network.params_dict = new_params
+                # set weights of new network
+                # weights of additional components are duplicates
+                for p in [s for s in new_params if 'means' in s or
+                          'precisions' in s]:
+
+                    print('- perturbing mode')
+                    old_params[p] = old_params[p[:-1] + '0'].copy()
+                    old_params[p] += 1.0e-2*self.rng.randn(*new_params[p].shape)
+
+                old_params['weights.mW'] = 0. * new_params['weights.mW']
+                old_params['weights.mb'] = 0. * new_params['weights.mb']
+
+                self.network.params_dict = old_params
+
+
+            elif split_mode=='spread_out':
+                pass
+
+            else:
+                raise NotImplementedError

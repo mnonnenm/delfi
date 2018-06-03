@@ -136,8 +136,8 @@ class BaseInference(metaclass=ABCMetaDoc):
         for b in filter(idx_hiddens, self.network.mps_bp):
             b.set_value(np.zeros_like(b.get_value()))
 
-    def conditional_norm(self, fcv = 0.8):
-        """ Normalizes current network output at obersved summary statistics
+    def conditional_norm(self, fcv = 0.8, tmu=None, tSig=None, h=None):
+        """ Normalizes current network output at observed summary statistics
 
 
         Parameters
@@ -146,7 +146,14 @@ class BaseInference(metaclass=ABCMetaDoc):
             Fraction of total that comes from uncertainty over components, i.e.
             Var[th] = E[Var[th|z]] + Var[E[th|z]]
                     =  (1-fcv)     +     fcv       = 1
+        tmu: array
+            Target mean. 
+        tSig: array
+            Target covariance. 
+        h: array
+            vector of activations of last hidden layer (layer before MoG layer)
         """
+
         # avoiding CDELFI.predict() attempt to analytically correct for proposal
         print('obs', self.obs.shape)
         print('mean', self.stats_mean.shape)
@@ -155,12 +162,13 @@ class BaseInference(metaclass=ABCMetaDoc):
         posterior = self.network.get_mog(obz.reshape(self.obs.shape), deterministic=True)
         mog =  posterior.ztrans_inv(self.params_mean, self.params_std)
 
-        assert np.all(np.diff(mog.a)==0.) # assumes uniform alpha
+        #assert np.all(np.diff(mog.a)==0.) # assumes uniform alpha
 
         n_dim = self.kwargs['n_outputs']
         triu_mask = np.triu(np.ones([n_dim, n_dim], dtype=dtype), 1)
         diag_mask = np.eye(n_dim, dtype=dtype)
 
+        # compute MoG mean mu, Sig = E[Var[th|z]] and C = Var[E[th|z]]
         mu, Sig = np.zeros_like(mog.xs[0].m), np.zeros_like(mog.xs[0].S)
         for i in range(self.network.n_components):
             Sig += mog.a[i] * mog.xs[i].S
@@ -170,30 +178,44 @@ class BaseInference(metaclass=ABCMetaDoc):
             dmu = mog.xs[i].m - mu if self.network.n_components > 1 else mog.xs[i].m
             C   += mog.a[i] * np.outer(dmu, dmu)
 
-        Z1inv = np.sqrt((1.-fcv) / np.diag(Sig)).reshape(-1)
-        Z2inv = np.sqrt(  fcv    / np.diag( C )).reshape(-1)
+        # if not provied, target zero-mean unit variance (as for prior_norm=True)
+        tmu = np.zeros_like(mog.xs[0].m) if tmu is None else tmu
+        tSig = np.eye(mog.xs[0].m.size) if tSig is None else tSig
 
+        # compute normalizers (we only z-score, don't whiten!)
+        Z1inv = np.sqrt((1.-fcv) / np.diag(Sig) * np.diag(tSig)).reshape(-1)
+        Z2inv = np.sqrt(  fcv    / np.diag( C ) * np.diag(tSig)).reshape(-1)
+            
+        # first we need the center of means
         def idx_MoG(x):
             return x.name[:5]=='means'
-
-        # first we need the center of means
         mu_ = np.zeros_like(mog.xs[0].m)
-        for b in filter(idx_MoG, self.network.mps_bp):
-            mu_ += b.get_value()
+        for w, b in zip(filter(idx_MoG, self.network.mps_wp),
+                        filter(idx_MoG, self.network.mps_bp)):                        
+            h = np.zeros(w.get_value().shape[0]) if h is None else h 
+            mu_ += h.dot(w.get_value()) + b.get_value()        
         mu_ /= self.network.n_components
 
         # center and normalize means
-        for b in filter(idx_MoG, self.network.mps_bp):
-            b.set_value(Z2inv * (b.get_value() - mu_))
+        # mu =  Z2inv * (Wh + b - mu_) + tmu
+        #    = Wh + (Z2inv * (b - mu_ + Wh) - Wh + tum) 
+        for w, b in zip(filter(idx_MoG, self.network.mps_wp),
+                        filter(idx_MoG, self.network.mps_bp)):
+            Wh = h.dot(w.get_value())
+            b.set_value(Z2inv * (Wh + b.get_value() - mu_) - Wh + tmu)
 
         # normalize covariances
         def idx_MoG(x):
             return x.name[:10]=='precisions'
-        for b in filter(idx_MoG, self.network.mps_bp):
-            val = b.get_value().copy()
-            val = val.reshape(n_dim,n_dim)
-            val = diag_mask * (val - np.diag(np.log(Z1inv))) + triu_mask * val.dot(np.diag(1./Z1inv))
+        # Sig^-0.5 = diag_mask * (exp(Wh+b)/exp(log(Z1)) + triu_mask * (Wh+b)*Z1
+        #          = diag_mask *  exp(Wh+ (b-log(Z1))    + triu_mask * (Wh+((b+Wh)*Z1-Wh))
+        for w, b in zip(filter(idx_MoG, self.network.mps_wp),
+                        filter(idx_MoG, self.network.mps_bp)):
+            Wh = h.dot(w.get_value()).reshape(n_dim,n_dim)
+            b_ = b.get_value().copy().reshape(n_dim,n_dim)
+            val = diag_mask * (b_ - np.diag(np.log(Z1inv))) + triu_mask * ((b_+Wh).dot(np.diag(1./Z1inv))- Wh )            
             b.set_value(val.flatten())
+            
 
 
     def norm_init(self): 
