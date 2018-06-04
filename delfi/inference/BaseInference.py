@@ -150,8 +150,7 @@ class BaseInference(metaclass=ABCMetaDoc):
             Target mean. 
         tSig: array
             Target covariance. 
-        h: array
-            vector of activations of last hidden layer (layer before MoG layer)
+
         """
 
         # avoiding CDELFI.predict() attempt to analytically correct for proposal
@@ -162,7 +161,7 @@ class BaseInference(metaclass=ABCMetaDoc):
         posterior = self.network.get_mog(obz.reshape(self.obs.shape), deterministic=True)
         mog =  posterior.ztrans_inv(self.params_mean, self.params_std)
 
-        #assert np.all(np.diff(mog.a)==0.) # assumes uniform alpha
+        assert np.all(np.diff(mog.a)==0.) # assumes uniform alpha
 
         n_dim = self.kwargs['n_outputs']
         triu_mask = np.triu(np.ones([n_dim, n_dim], dtype=dtype), 1)
@@ -185,7 +184,7 @@ class BaseInference(metaclass=ABCMetaDoc):
         # compute normalizers (we only z-score, don't whiten!)
         Z1inv = np.sqrt((1.-fcv) / np.diag(Sig) * np.diag(tSig)).reshape(-1)
         Z2inv = np.sqrt(  fcv    / np.diag( C ) * np.diag(tSig)).reshape(-1)
-            
+        
         # first we need the center of means
         def idx_MoG(x):
             return x.name[:5]=='means'
@@ -213,10 +212,11 @@ class BaseInference(metaclass=ABCMetaDoc):
                         filter(idx_MoG, self.network.mps_bp)):
             Wh = h.dot(w.get_value()).reshape(n_dim,n_dim)
             b_ = b.get_value().copy().reshape(n_dim,n_dim)
-            val = diag_mask * (b_ - np.diag(np.log(Z1inv))) + triu_mask * ((b_+Wh).dot(np.diag(1./Z1inv))- Wh )            
+            
+            val = diag_mask * (b_ - np.diag(np.log(Z1inv))) + triu_mask * ((b_+Wh).dot(np.diag(1./Z1inv))- Wh )
+            
             b.set_value(val.flatten())
             
-
 
     def norm_init(self): 
         if self.init_norm:

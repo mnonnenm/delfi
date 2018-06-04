@@ -7,6 +7,10 @@ from delfi.neuralnet.NeuralNet import NeuralNet
 from delfi.neuralnet.Trainer import Trainer
 from delfi.neuralnet.loss.regularizer import svi_kl_zero
 
+import lasagne.layers as ll
+import theano
+dtype = theano.config.floatX
+
 def per_round(y):
 
     if type(y) == list:
@@ -67,6 +71,8 @@ class CDELFI(BaseInference):
             assert kwargs['n_components'] == 1 # moved n_components argument to run()
         super().__init__(generator, **kwargs)
 
+        self.init_fcv = 0.8 # CDELFI won't call conditional_norm() with single component
+
         self.obs = obs
         if np.any(np.isnan(self.obs)):
             raise ValueError("Observed data contains NaNs")
@@ -101,7 +107,7 @@ class CDELFI(BaseInference):
         return loss
 
     def run(self, n_train=100, n_rounds=2, epochs=100, minibatch=50,
-            monitor=None, n_components=1, **kwargs):
+            monitor=None, n_components=1, stndrd_comps=False, **kwargs):
         """Run algorithm
 
         Parameters
@@ -170,7 +176,7 @@ class CDELFI(BaseInference):
 
             if r == n_rounds: 
                 self.kwargs.update({'n_components': n_components})
-                self.split_components()
+                self.split_components(standardize=stndrd_comps)
 
             if r > 1:
                 self.reinit_network() # reinits network if flag is set
@@ -306,35 +312,51 @@ class CDELFI(BaseInference):
             return super(CDELFI, self).predict(x)  # via super
 
 
-    def split_components(self, split_mode=None):
+    def split_components(self, standardize=False):
+
+        eps = 1.0e-2 if standardize else 1.0e-6
 
         if self.network.n_components == 1 and self.kwargs['n_components'] > 1:
 
-            if split_mode is None:
-                # get parameters of current network
-                old_params = self.network.params_dict.copy()
+            # get parameters of current network
+            old_params = self.network.params_dict.copy()
 
-                # create new network
-                self.network = NeuralNet(**self.kwargs)
-                new_params = self.network.params_dict
+            # create new network
+            self.network = NeuralNet(**self.kwargs)
+            new_params = self.network.params_dict
 
-                # set weights of new network
-                # weights of additional components are duplicates
-                for p in [s for s in new_params if 'means' in s or
-                          'precisions' in s]:
+            # set weights of new network
+            # weights of additional components are duplicates
+            for p in [s for s in new_params if 'means' in s or
+                      'precisions' in s]:
 
-                    print('- perturbing mode')
-                    old_params[p] = old_params[p[:-1] + '0'].copy()
-                    old_params[p] += 1.0e-2*self.rng.randn(*new_params[p].shape)
+                old_params[p] = old_params[p[:-1] + '0'].copy()
+                old_params[p] += eps*self.rng.randn(*new_params[p].shape)
 
-                old_params['weights.mW'] = 0. * new_params['weights.mW']
-                old_params['weights.mb'] = 0. * new_params['weights.mb']
+            # assert mixture coefficients are alpha_k = 1/n_components)
+            old_params['weights.mW'] = 0. * new_params['weights.mW']
+            old_params['weights.mb'] = 0. * new_params['weights.mb']
 
-                self.network.params_dict = old_params
+            self.network.params_dict = old_params
 
+            if standardize:
+                self.standardize_components()
 
-            elif split_mode=='spread_out':
-                pass
+    def standardize_components(self):
 
-            else:
-                raise NotImplementedError
+        last_hidden = self.network.layer['mixture_weights'].input_layer
+        h = theano.function(
+            inputs=[self.network.stats, self.network.extra_stats],
+            outputs=[ll.get_output(last_hidden)])
+
+        n, d = self.network.n_inputs_hidden, self.network.n_inputs
+        stats = (self.obs-self.stats_mean)/self.stats_std
+        input_stats = [stats[:,:-n].reshape(-1,*d).astype(dtype),
+                       stats[:,-n:].astype(dtype)]
+
+        proposal = self.generator.proposal
+
+        self.conditional_norm(fcv=self.init_fcv,
+                              tmu=(proposal.m-self.params_mean)/self.params_std,
+                              tSig=proposal.S,
+                              h=h(*input_stats)[0].flatten())
