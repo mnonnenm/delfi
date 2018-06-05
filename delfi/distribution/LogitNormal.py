@@ -27,6 +27,10 @@ class LogitNormal(BaseDistribution):
             Upper or lower triangular covariance factor, in any case S = C'C
         Pm : list or np.array, 1d
             Precision times mean such that P*m = Pm
+        lower: list or np.array, 1d
+            lower bounds for logit-box. Defaults to 1 for each parameter.
+        upper: list or np.array, 1d
+            upper bounds for logit-box. Defaults to 1 for each parameter.
         seed : int or None
             If provided, random number generator will be seeded
         """
@@ -133,7 +137,6 @@ class LogitNormal(BaseDistribution):
         if x.ndim==1:
             x = x.reshape(-1,1)
 
-
         if ii is None:
 
             x = (x - self.lower) / (self.upper - self.lower)
@@ -143,7 +146,7 @@ class LogitNormal(BaseDistribution):
             lp = -np.sum(np.dot(xm, self.P) * xm, axis=1)
             lp += self.logdetP - self.ndim * np.log(2.0 * np.pi) 
             lp *= 0.5
-            lp -= np.sum(np.log(x*(1-x)), axis=1) + np.log(self.upper-self.lower)
+            lp -= np.sum(np.log(x*(1-x)), axis=1) + np.sum(np.log(self.upper-self.lower))
         else:
             m = self.m[ii]
             S = self.S[ii][:, ii]
