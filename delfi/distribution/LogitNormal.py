@@ -6,7 +6,8 @@ from delfi.distribution.StudentsT import StudentsT
 
 
 class LogitNormal(BaseDistribution):
-    def __init__(self, m=None, P=None, U=None, S=None, Pm=None, seed=None):
+    def __init__(self, m=None, P=None, U=None, S=None, Pm=None, 
+                 upper=None, lower=None, seed=None):
         """LogitNormal distribution
 
         Initialize a logit-normal pdf given a valid combination of its parameters.
@@ -29,7 +30,6 @@ class LogitNormal(BaseDistribution):
         seed : int or None
             If provided, random number generator will be seeded
         """
-
 
         assert m is None or np.asarray(m).ndim == 1
         assert P is None or np.asarray(P).ndim == 2
@@ -108,6 +108,12 @@ class LogitNormal(BaseDistribution):
         else:
             raise ValueError('Mean information missing')
 
+        self.lower = np.zeros_like(m) if lower is None else np.atleast_1d(lower)
+        self.upper = np.ones_like(m)  if upper is None else np.atleast_1d(upper)
+
+        assert self.lower.ndim == self.upper.ndim
+        assert self.lower.ndim == 1            
+
         super().__init__(ndim, seed=seed)
 
     @property
@@ -127,21 +133,28 @@ class LogitNormal(BaseDistribution):
         if x.ndim==1:
             x = x.reshape(-1,1)
 
-        logitx = np.log(x) - np.log(1.-x)
 
         if ii is None:
+
+            x = (x - self.lower) / (self.upper - self.lower)
+            logitx = np.log(x) - np.log(1.-x)
+
             xm = logitx - self.m
             lp = -np.sum(np.dot(xm, self.P) * xm, axis=1)
             lp += self.logdetP - self.ndim * np.log(2.0 * np.pi) 
             lp *= 0.5
-            lp -= np.sum(np.log(x*(1-x)), axis=1)
+            lp -= np.sum(np.log(x*(1-x)), axis=1) + np.log(self.upper-self.lower)
         else:
             m = self.m[ii]
             S = self.S[ii][:, ii]
+
+            x = (x - self.lower[ii]) / (self.upper[ii] - self.lower[ii])
+            logitx = np.log(x) - np.log(1.-x)
+
             if np.linalg.matrix_rank(S)==len(S[:,0]):
                 lp = scipy.stats.multivariate_normal.logpdf(logitx, m, S, allow_singular=True)
                 lp = np.array([lp]) if x.shape[0] == 1 else lp
-                lp -= np.sum(np.log(x*(1-x)), axis=1)
+                lp -= np.sum(np.log(x*(1-x)), axis=1) + np.sum(np.log(self.upper[ii]-self.lower[ii]))
             else:
                 raise ValueError('Rank deficiency in covariance matrix')
 
@@ -153,7 +166,7 @@ class LogitNormal(BaseDistribution):
         # See BaseDistribution.py for docstring
         z = self.rng.randn(n_samples, self.ndim)
         samples = np.dot(z, self.C) + self.m
-        return 1./ (1. + np.exp(-samples))
+        return (self.upper - self.lower) / (1. + np.exp(-samples)) + self.lower
 
     #def convert_to_exp(self):
     #    """Return equivalent Gaussian for exp(X)"""
