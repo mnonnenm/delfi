@@ -1,5 +1,6 @@
 from delfi.distribution.Discrete import Discrete
 from delfi.distribution.Gaussian import Gaussian
+from delfi.distribution.LogNormal import LogNormal
 from delfi.distribution.StudentsT import StudentsT
 from delfi.distribution.Uniform import Uniform, LogUniform
 from delfi.distribution.Gamma import Gamma
