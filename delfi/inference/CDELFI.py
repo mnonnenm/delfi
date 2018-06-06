@@ -107,7 +107,9 @@ class CDELFI(BaseInference):
         return loss
 
     def run(self, n_train=100, n_rounds=2, epochs=100, minibatch=50,
-            monitor=None, n_components=1, stndrd_comps=False, **kwargs):
+            monitor=None, n_components=1, stndrd_comps=False, 
+            project_proposal=False, 
+            **kwargs):
         """Run algorithm
 
         Parameters
@@ -161,6 +163,9 @@ class CDELFI(BaseInference):
                     proposal = self.predict_from_MoG_prop(self.obs)
                 else:
                     raise NotImplementedError
+
+                if project_proposal:
+                    proposal = proposal.project_to_gaussian()
 
                 if isinstance(proposal, dd.MoG) and len(proposal.xs) == 1:  
                     proposal = proposal.project_to_gaussian()               
@@ -341,6 +346,33 @@ class CDELFI(BaseInference):
 
             if standardize:
                 self.standardize_components()
+
+        elif self.network.n_components > 1:
+            if (self.kwargs['n_components']%self.network.n_components)==0:
+
+                # get parameters of current network
+                old_params = self.network.params_dict.copy()
+
+                # create new network
+                self.network = NeuralNet(**self.kwargs)
+                new_params = self.network.params_dict
+
+                # set weights of new network
+                # weights of additional components are duplicates
+                for p in [s for s in new_params if 'means' in s or
+                          'precisions' in s]:
+
+                    old_params[p] = old_params[p[:-1] + '0'].copy()
+                    old_params[p] += eps*self.rng.randn(*new_params[p].shape)
+
+                # assert mixture coefficients are alpha_k = 1/n_components)
+                old_params['weights.mW'] = 0. * new_params['weights.mW']
+                old_params['weights.mb'] = 0. * new_params['weights.mb']
+
+                self.network.params_dict = old_params
+
+                if standardize:
+                    self.standardize_components()
 
     def standardize_components(self):
 
