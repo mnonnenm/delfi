@@ -67,8 +67,8 @@ class CDELFI(BaseInference):
             training the neural network.
         """
         # Algorithm 1 of PM requires a single component
-        if 'n_components' in kwargs:
-            assert kwargs['n_components'] == 1 # moved n_components argument to run()
+        #if 'n_components' in kwargs:
+        #    assert kwargs['n_components'] == 1 # moved n_components argument to run()
         super().__init__(generator, **kwargs)
 
         self.init_fcv = 0.8 # CDELFI won't call conditional_norm() with single component
@@ -164,7 +164,7 @@ class CDELFI(BaseInference):
                 else:
                     raise NotImplementedError
 
-                if project_proposal:
+                if project_proposal and isinstance(posterior, dd.mixture.BaseMixture.BaseMixture):
                     proposal = proposal.project_to_gaussian()
 
                 if isinstance(proposal, dd.MoG) and len(proposal.xs) == 1:  
@@ -316,26 +316,29 @@ class CDELFI(BaseInference):
 
             return super(CDELFI, self).predict(x)  # via super
 
-
     def split_components(self, standardize=False):
 
         eps = 1.0e-2 if standardize else 1.0e-6
 
-        if self.network.n_components == 1 and self.kwargs['n_components'] > 1:
-
+        if self.kwargs['n_components'] > self.network.n_components:
+            
             # get parameters of current network
             old_params = self.network.params_dict.copy()
+            old_n_components = self.network.n_components
 
             # create new network
             self.network = NeuralNet(**self.kwargs)
             new_params = self.network.params_dict
 
             # set weights of new network
-            # weights of additional components are duplicates
-            for p in [s for s in new_params if 'means' in s or
-                      'precisions' in s]:
+            comps_new = [s for s in new_params if 'means' in s or
+                      'precisions' in s]
 
-                old_params[p] = old_params[p[:-1] + '0'].copy()
+            # weights of additional components are duplicates
+            for p in np.sort(comps_new):
+                i = int(float(p[-1]))%old_n_components
+                # WARNING: this assumes there is less <10 old components!
+                old_params[p] = old_params[p[:-1] + str(i)].copy()
                 old_params[p] += eps*self.rng.randn(*new_params[p].shape)
 
             # assert mixture coefficients are alpha_k = 1/n_components)
@@ -347,32 +350,6 @@ class CDELFI(BaseInference):
             if standardize:
                 self.standardize_components()
 
-        elif self.network.n_components > 1:
-            if (self.kwargs['n_components']%self.network.n_components)==0:
-
-                # get parameters of current network
-                old_params = self.network.params_dict.copy()
-
-                # create new network
-                self.network = NeuralNet(**self.kwargs)
-                new_params = self.network.params_dict
-
-                # set weights of new network
-                # weights of additional components are duplicates
-                for p in [s for s in new_params if 'means' in s or
-                          'precisions' in s]:
-
-                    old_params[p] = old_params[p[:-1] + '0'].copy()
-                    old_params[p] += eps*self.rng.randn(*new_params[p].shape)
-
-                # assert mixture coefficients are alpha_k = 1/n_components)
-                old_params['weights.mW'] = 0. * new_params['weights.mW']
-                old_params['weights.mb'] = 0. * new_params['weights.mb']
-
-                self.network.params_dict = old_params
-
-                if standardize:
-                    self.standardize_components()
 
     def standardize_components(self):
 
