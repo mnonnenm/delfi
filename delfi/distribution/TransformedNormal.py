@@ -5,7 +5,7 @@ from delfi.distribution.BaseDistribution import BaseDistribution
 from delfi.distribution.StudentsT import StudentsT
 
 
-class DefaultNormal(BaseDistribution):
+class TransformedNormal(BaseDistribution):
     def __init__(self, m=None, P=None, U=None, S=None, Pm=None, 
                  upper=None, lower=None, flags=None, seed=None):
         """multivariate normals with some entries in log- and/or logit-space.
