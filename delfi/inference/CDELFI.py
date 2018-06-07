@@ -251,6 +251,14 @@ class CDELFI(BaseInference):
     def predict_from_MoG_prop(self, x, threshold=0.01):
         """Predict posterior given x
 
+        Predicts posteriors from the attached MDN and corrects for
+        missmatch in the prior and proposal prior if the latter is
+        given by a Gaussian mixture with multiple mixture components.
+
+        Assumes proposal mixture components are well-separated, which 
+        allows to locally correct each posterior component only for the 
+        closest proposal component. 
+
         Parameters
         ----------
         x : array
@@ -270,13 +278,18 @@ class CDELFI(BaseInference):
         xs_new, a_new = [], []
         for c in mog.xs:
 
+            # greedily pairing proposal and posterior components by means
+            # (should probably at least use Mahalanobis distance)
             dists = np.sum( (means - np.atleast_2d(c.m))**2, axis=1)
             i = np.argmin(dists)
 
             c_prop = prop.xs[i]
             a_prop = prop.a[i]
 
+            # correct means and covariances of individual proposals
             c_post = (c * prior) / c_prop
+
+            # correct mixture coefficients a[i]
 
             # prefactors
             log_a = np.log(mog.a[i]) - np.log(a_prop) 
@@ -287,37 +300,50 @@ class CDELFI(BaseInference):
             log_a -= 0.5 * d0
             log_a += 0.5 * c_prop.m.dot(c_prop.Pm)
             log_a += 0.5 * c_post.m.dot(c_post.Pm)
-            
             a_i = np.exp(log_a)
             
             xs_new.append(c_post)
             a_new.append(a_i)
 
         a_new = np.array(a_new)
+        # alpha defined only up to \tilde{p}(x) / p(x), i.e. need to normalize
         a_new /= a_new.sum()
 
         return dd.MoG( xs = xs_new, a = a_new )
 
 
     def predict_uncorrected(self, x):
-            """Predict posterior given x under proposal prior
+        """Predict posterior given x under proposal prior
 
-            Predicts the uncorrected posterior associated with the proposal
-            prior (versus the original prior). 
+        Predicts the uncorrected posterior associated with the proposal
+        prior (versus the original prior). 
 
-            Allows to obtain some posterior estimates when the analytical 
-            correction for the proposal prior fails. 
+        Allows to obtain some posterior estimates when the analytical 
+        correction for the proposal prior fails. 
 
-            Parameters
-            ----------
-            x : array
-                Stats for which to compute the posterior
-            """
+        Parameters
+        ----------
+        x : array
+            Stats for which to compute the posterior
+        """
 
-            return super(CDELFI, self).predict(x)  # via super
+        return super(CDELFI, self).predict(x)  # via super
 
-    def split_components(self, standardize=False):
+    def split_components(self, standardize=False):0
+        """Split MoG components
 
+        Replicates, perturbes and (optionally) standardizes MoG
+        components across rounds. 
+
+        Replica MoG components serve as part of initialization for 
+        MDN in the next round. 
+
+        Parameters
+        ----------
+        standardize : boolean
+            whether to standardize the replicated components 
+        """
+        # define magnitute of (symmetry-breaking) perturbation noise on weights
         eps = 1.0e-2 if standardize else 1.0e-6
 
         if self.kwargs['n_components'] > self.network.n_components:
@@ -352,7 +378,21 @@ class CDELFI(BaseInference):
 
 
     def standardize_components(self):
+        """Standardize MoG components
 
+        Changes weights in MoG layer of the attached MDN to split the 
+        support of a Gaussian proposal prior among multiple MoG components
+        of the posterior estimate. 
+
+        Meant to give multi-component MDN initializations that start with
+        more distinguishable components than is achieved through simply 
+        replicating components and perturbing them with symmetry-breaking
+        noise.  
+
+        """
+        assert isinstance(self.generator.proposal, dd.Gaussian) 
+
+        # grab activation from last hidden layer
         last_hidden = self.network.layer['mixture_weights'].input_layer
         h = theano.function(
             inputs=[self.network.stats, self.network.extra_stats],
@@ -363,6 +403,7 @@ class CDELFI(BaseInference):
         input_stats = [stats[:,:-n].reshape(-1,*d).astype(dtype),
                        stats[:,-n:].astype(dtype)]
 
+        # target variance and (z-scored) mean from proposal
         proposal = self.generator.proposal
 
         self.conditional_norm(fcv=self.init_fcv,
