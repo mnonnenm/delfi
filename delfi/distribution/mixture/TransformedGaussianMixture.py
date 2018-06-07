@@ -37,6 +37,14 @@ class MoTG(BaseMixture):
             Covariances
         xs : list, length n_components
             List of gaussian variables
+        flags: list or np.array, 1d
+            List of flags for each variable whether it is untransformed (=0),
+            log-transformed (=1) or logit-transformed (=2).
+        lower: list or np.array, 1d
+            Lower bounds for logit-box. Defaults to 0 for each parameter.
+        upper: list or np.array, 1d
+            Upper bounds for logit-box. Defaults to 1 for each parameter.
+
         seed : int or None
             If provided, random number generator will be seeded
         """
@@ -53,7 +61,6 @@ class MoTG(BaseMixture):
 
         assert self.flags.ndim == 1            
         assert np.all(np.in1d(np.unique(self.flags), np.arange(3)))
-
 
         if ms is not None:
             super().__init__(
@@ -97,8 +104,31 @@ class MoTG(BaseMixture):
                 seed=seed)
             self.xs = xs
 
+            # MoGT enforces its flags and bounds (initialize accordingly!):
+            for x in xs:
+                assert np.all(x.flags == self.flags)
+                assert np.all(x.upper == self.upper)
+                assert np.all(x.lower == self.lower)
+
         else:
             raise ValueError('Mean information missing')
+
+    def _f(self, x):
+        """ forward transformation
+            x[i] -> x[i]        for Gaussian x[i]
+            x[i] -> log(x[i])   for log-Normal x[i]
+            x[i] -> logit(x[i]) for logit-Normal x[i]
+         """
+        return self.xs[0]._f(x)
+
+    def _finv(self, x):
+        """ backward transformation
+            x[i] -> x[i]        for Gaussian x[i]
+            x[i] -> exp(x[i])   for log-Normal x[i]
+            x[i] -> expit(x[i]) for logit-Normal x[i]
+         """
+        return self.xs[0]._finv(x)
+
 
     @property
     def mean(self):
