@@ -329,7 +329,7 @@ class CDELFI(BaseInference):
 
         return super(CDELFI, self).predict(x)  # via super
 
-    def split_components(self, standardize=False):0
+    def split_components(self, standardize=False):
         """Split MoG components
 
         Replicates, perturbes and (optionally) standardizes MoG
