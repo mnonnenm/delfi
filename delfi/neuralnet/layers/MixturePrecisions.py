@@ -17,7 +17,7 @@ class MixturePrecisionsLayer(lasagne.layers.Layer):
                  n_components,
                  n_dim,
                  svi=True,
-                 diag_cov=False,
+                 rank=None,
                  homoscedastic=False,
                  mWs_init=linit.HeNormal(),
                  mbs_init=linit.Constant([0.]),
@@ -51,7 +51,7 @@ class MixturePrecisionsLayer(lasagne.layers.Layer):
         """
         super(MixturePrecisionsLayer, self).__init__(incoming, **kwargs)
         self.n_components = n_components
-        self.diag_cov = diag_cov
+        self.rank = rank
         assert not homoscedastic
         self.homoscedastic = homoscedastic
         self.n_dim = n_dim
@@ -90,10 +90,9 @@ class MixturePrecisionsLayer(lasagne.layers.Layer):
             ldetUs : list of length n_components with (batch, n_dim, n_dim)
                 Log determinants of precisions
         """
-        if self.diag_cov:
-            triu_mask = np.zeros([self.n_dim, self.n_dim], dtype=dtype)
-        else:
-            triu_mask = np.triu(np.ones([self.n_dim, self.n_dim], dtype=dtype), 1)
+        triu_mask = np.triu(np.ones([self.n_dim, self.n_dim], dtype=dtype), 1)
+        if not self.rank is None:
+            triu_mask[self.rank:] *= 0.
         diag_mask = np.eye(self.n_dim, dtype=dtype)
         offdiag_mask = np.ones(self.n_dim, dtype=dtype) - \
             np.eye(self.n_dim, dtype=dtype)
@@ -137,7 +136,7 @@ class MixtureHomoscedasticPrecisionsLayer(lasagne.layers.Layer):
                  n_components,
                  n_dim,
                  svi=True,
-                 diag_cov=False,
+                 rank=None,
                  homoscedastic=True,
                  mbs_init=linit.Constant([0.]),
                  sbs_init=linit.Constant([-5.]),
@@ -169,7 +168,7 @@ class MixtureHomoscedasticPrecisionsLayer(lasagne.layers.Layer):
         """
         super(MixtureHomoscedasticPrecisionsLayer, self).__init__(incoming, **kwargs)
         self.n_components = n_components
-        self.diag_cov = diag_cov
+        self.rank = rank
         assert homoscedastic
         self.homoscedastic = homoscedastic
         self.n_dim = n_dim
@@ -208,10 +207,9 @@ class MixtureHomoscedasticPrecisionsLayer(lasagne.layers.Layer):
             ldetUs : list of length n_components with (batch, n_dim, n_dim)
                 Log determinants of precisions
         """
-        if self.diag_cov:
-            triu_mask = np.zeros([self.n_dim, self.n_dim], dtype=dtype)
-        else:
-            triu_mask = np.triu(np.ones([self.n_dim, self.n_dim], dtype=dtype), 1)
+        triu_mask = np.triu(np.ones([self.n_dim, self.n_dim], dtype=dtype), 1)
+        if not self.rank is None:
+            triu_mask[self.rank:] *= 0.
         diag_mask = np.eye(self.n_dim, dtype=dtype)
         offdiag_mask = np.ones(self.n_dim, dtype=dtype) - \
             np.eye(self.n_dim, dtype=dtype)
