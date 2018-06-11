@@ -216,14 +216,19 @@ def plot_pdf(pdf1, lims, pdf2=None, gt=None, contours=False, levels=(0.68, 0.95)
             else:
                 rows = pdf1.ndim
                 cols = pdf1.ndim
+            plt_rows = rows
+            plt_cols = cols
         else:
-            cols = diag_only_cols
-            rows = diag_only_rows
+            cols = diag_only_cols**2
+            rows = diag_only_rows**2
+            plt_rows = diag_only_cols
+            plt_cols = diag_only_cols
+
             r = 0
             c = -1
 
-        fig, ax = plt.subplots(rows, cols, facecolor='white', figsize=figsize)
-        ax = ax.reshape(rows, cols)
+        fig, ax = plt.subplots(plt_rows, plt_cols, facecolor='white', figsize=figsize)
+        ax = ax.reshape(plt_rows, plt_cols)
 
         for i in range(rows):
             for j in range(cols):
@@ -239,11 +244,11 @@ def plot_pdf(pdf1, lims, pdf2=None, gt=None, contours=False, levels=(0.68, 0.95)
                         if pdf is not None:
                             pp = pdf.eval(xx, ii=[i], log=False)
 
-                            if diag_only:
-                                c += 1
-                            else:
-                                r = i
-                                c = j
+                    if diag_only:
+                        c += 1
+                    else:
+                        r = i
+                        c = j
 
                     for pdf, col in zip(pdfs, colrs):
                         if pdf is not None:
@@ -344,7 +349,7 @@ def plot_pdf(pdf1, lims, pdf2=None, gt=None, contours=False, levels=(0.68, 0.95)
                         ax[i, j].text(x1 + (x1 - x0) / 6., (y0 + y1) /
                                       2., '...', fontsize=fontscale * 25)
 
-                if diag_only and c == cols - 1:
+                if diag_only and c == plt_cols - 1:
                     c = -1
                     r += 1
 
