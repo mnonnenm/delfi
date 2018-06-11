@@ -69,11 +69,13 @@ class CDELFI(BaseInference):
         # Algorithm 1 of PM requires a single component
         #if 'n_components' in kwargs:
         #    assert kwargs['n_components'] == 1 # moved n_components argument to run()
+
+        self.obs = obs
+        
         super().__init__(generator, **kwargs)
 
         self.init_fcv = 0.8 # CDELFI won't call conditional_norm() with single component
 
-        self.obs = obs
         if np.any(np.isnan(self.obs)):
             raise ValueError("Observed data contains NaNs")
 

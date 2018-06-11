@@ -70,9 +70,9 @@ class SNPE(BaseInference):
             Dictionary containing theano variables that can be monitored while
             training the neural network.
         """
-        super().__init__(generator, **kwargs)
 
         self.obs = obs
+        super().__init__(generator, **kwargs)
 
         self.reg_lambda = reg_lambda
         self.round = 0

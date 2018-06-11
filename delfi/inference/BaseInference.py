@@ -67,12 +67,6 @@ class BaseInference(metaclass=ABCMetaDoc):
         self.svi = self.network.svi
         self.kwargs = kwargs
 
-        # optional: z-transform output for obs (also re-centres x onto obs!)
-        self.init_norm = init_norm
-        self.init_fcv = 0.8 if self.network.n_components > 1 else 0.
-        self.norm_init()
-
-
         # parameters for z-transform of params
         if prior_norm:
             # z-transform for params based on prior
@@ -94,6 +88,11 @@ class BaseInference(metaclass=ABCMetaDoc):
 
             print('init mean' , self.stats_mean.shape)
             print('init  std' , self.stats_std.shape)
+
+        # optional: z-transform output for obs (also re-centres x onto obs!)
+        self.init_norm = init_norm
+        self.init_fcv = 0.8 if self.network.n_components > 1 else 0.
+        self.norm_init()            
 
         # observables contains vars that can be monitored during training
         self.compile_observables()
