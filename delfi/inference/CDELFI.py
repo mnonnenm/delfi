@@ -7,6 +7,8 @@ from delfi.neuralnet.NeuralNet import NeuralNet
 from delfi.neuralnet.Trainer import Trainer
 from delfi.neuralnet.loss.regularizer import svi_kl_zero
 
+from delfi.utils.sbc import SBC
+
 import lasagne.layers as ll
 import theano
 dtype = theano.config.floatX
@@ -69,7 +71,6 @@ class CDELFI(BaseInference):
         # Algorithm 1 of PM requires a single component
         #if 'n_components' in kwargs:
         #    assert kwargs['n_components'] == 1 # moved n_components argument to run()
-
         self.obs = obs
         
         super().__init__(generator, **kwargs)
@@ -110,7 +111,7 @@ class CDELFI(BaseInference):
 
     def run(self, n_train=100, n_rounds=2, epochs=100, minibatch=50,
             monitor=None, n_components=1, stndrd_comps=False, 
-            project_proposal=False, 
+            project_proposal=False, sbc_fun = None,
             **kwargs):
         """Run algorithm
 
@@ -160,7 +161,7 @@ class CDELFI(BaseInference):
                 # posterior becomes new proposal prior
                 if self.round==2 or isinstance(self.generator.proposal, (dd.Uniform,dd.Gaussian)):  
                     proposal = self.predict(self.obs)
-                elif len(self.generator.proposal.xs) == n_components:                    
+                elif len(self.generator.proposal.xs) <= n_components:
                     print('correcting for MoG proposal')
                     proposal = self.predict_from_MoG_prop(self.obs)
                 else:
@@ -205,13 +206,21 @@ class CDELFI(BaseInference):
 
             if self.round==1 or isinstance(self.generator.proposal, (dd.Uniform,dd.Gaussian)):  
                 posterior = self.predict(self.obs)
-            elif len(self.generator.proposal.xs) == n_components:                    
+            elif len(self.generator.proposal.xs) >= n_components:                    
                 print('correcting for MoG proposal')
                 posterior = self.predict_from_MoG_prop(self.obs)
             else:
                 raise NotImplementedError
 
             posteriors.append(posterior)
+
+            if not sbc_fun is None:
+                try: 
+                    sbc = SBC(generator=self.generator, inf=self, f=sbc_fun)
+                    logs[-1]['sbc'] = sbc.test(N=None, L=100, 
+                                               data=(trn_data[0], trn_data[1]))
+                except:
+                    print('SBC failed')
 
             #except:
             #    posteriors.append(None)
@@ -402,8 +411,11 @@ class CDELFI(BaseInference):
 
         n, d = self.network.n_inputs_hidden, self.network.n_inputs
         stats = (self.obs-self.stats_mean)/self.stats_std
-        input_stats = [stats[:,:-n].reshape(-1,*d).astype(dtype),
-                       stats[:,-n:].astype(dtype)]
+        if n > 0:
+            input_stats = [stats[:,:-n].reshape(-1,*d).astype(dtype),
+                           stats[:,-n:].astype(dtype)]
+        else: 
+            input_stats = stats.reshape(-1, *d).astype(dtype)
 
         # target variance and (z-scored) mean from proposal
         proposal = self.generator.proposal

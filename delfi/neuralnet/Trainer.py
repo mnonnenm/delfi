@@ -172,6 +172,18 @@ class Trainer:
                 return trn_batch
         else:
             def split_stats(trn_batch):
+
+                if len(trn_batch)==3:
+                    th,x,iws = trn_batch
+                    trn_batch = (th, 
+                                 x.reshape(-1,*n_inputs),
+                                 iws)
+
+                elif len(trn_batch)==2:
+                    th,x = trn_batch
+                    trn_batch = (th, 
+                                 x.reshape(-1,*n_inputs))
+
                 return trn_batch
 
 

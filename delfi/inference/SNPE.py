@@ -218,6 +218,7 @@ class SNPE(BaseInference):
                     ks = list(self.network.layer.keys())
                     #hiddens = np.where([i[:6]=='hidden' for i in ks])[0]
                     #cbk_feature_layer = hiddens[-1] # pick last hidden layer
+                    print('cbk_feature_layer ', ks[cbk_feature_layer])
                     hl = self.network.layer[ks[cbk_feature_layer]]
 
                     stat_features = theano.function(
@@ -227,9 +228,13 @@ class SNPE(BaseInference):
                     idx_proposal = np.where(trn_data[2])[0]
                     minibatch_cbk = np.min((minibatch_cbk, idx_proposal.size))
 
-                    fstats = stat_features(trn_data[1][idx_proposal,:]).reshape(idx_proposal.size,-1)
+                    fstats = stat_features(trn_data[1][idx_proposal,:].reshape(
+                                idx_proposal.size,*self.network.n_inputs))[0]
+
+                    fstats = fstats.reshape(idx_proposal.size, -1)
+
                     obs_z = (self.obs - self.stats_mean) / self.stats_std
-                    fobs_z = stat_features(obs_z).reshape(1,-1)
+                    fobs_z = stat_features(obs_z.reshape(1,*self.network.n_inputs))[0].reshape(1,-1)
 
                     cbkrnl, cbl = kernel_opt(
                         iws=iws[idx_proposal].astype(np.float32), 
@@ -244,8 +249,10 @@ class SNPE(BaseInference):
                         **kwargs)
                     if verbose: 
                         print('done.')
+
+                    fstats = stat_features(trn_data[1].reshape(
+                                n_train_round,*self.network.n_inputs))[0].reshape(n_train_round,-1)
                         
-                    fstats = stat_features(trn_data[1]).reshape(n_train_round,-1)
                     iws *= cbkrnl.eval(fstats)
 
             # normalize weights

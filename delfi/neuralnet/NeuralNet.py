@@ -160,7 +160,7 @@ class NeuralNet(object):
             incoming=last(self.layer),
             outdim=2)
 
-        if not n_inputs_hidden is None:
+        if not n_inputs_hidden is None and n_inputs_hidden > 0:
             self.extra_stats = tt.matrix('extra_stats', dtype=dtype)
             extra_in = ll.InputLayer((None, n_inputs_hidden), 
                                      input_var=self.extra_stats)
@@ -300,7 +300,7 @@ class NeuralNet(object):
             input_stats = [stats[:,:-n].reshape(-1,*d).astype(dtype),
                            stats[:,-n:].astype(dtype)]
         else: 
-            input_stats = [stats.astype(dtype)]
+            input_stats = [stats.reshape(-1,*d).astype(dtype)]
 
         if deterministic:
             return self._f_eval_dcomps(*input_stats)
@@ -326,7 +326,7 @@ class NeuralNet(object):
             input_stats = [stats[:,:-n].reshape(-1,*d).astype(dtype),
                            stats[:,-n:].astype(dtype)]
         else: 
-            input_stats = [stats.astype(dtype)]
+            input_stats = [stats.reshape(-1,*d).astype(dtype)]
 
         if deterministic:
             return self._f_eval_dlprobs(params.astype(dtype), *input_stats)

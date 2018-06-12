@@ -161,6 +161,7 @@ def kernel_opt(iws, stats, obs, kernel_loss=None, step=lu.adam,
                    monitor=monitor, seed=seed)
 
     logs = trnr.train(epochs=epochs,
+               n_inputs=[],
                minibatch=minibatch,
                monitor_every=monitor_every,
                stop_on_nan=stop_on_nan,
