@@ -215,12 +215,13 @@ class CDELFI(BaseInference):
             posteriors.append(posterior)
 
             if not sbc_fun is None:
-                try: 
-                    sbc = SBC(generator=self.generator, inf=self, f=sbc_fun)
-                    logs[-1]['sbc'] = sbc.test(N=None, L=100, 
-                                               data=(trn_data[0], trn_data[1]))
-                except:
-                    print('SBC failed')
+                #try:
+                print('computing simulation-based calibration')
+                sbc = SBC(generator=self.generator, inf=self, f=sbc_fun)
+                logs[-1]['sbc'] = sbc.test(N=None, L=100, 
+                                           data=(trn_data[0], trn_data[1]))
+                #except:
+                #    print('SBC failed')
 
             #except:
             #    posteriors.append(None)
