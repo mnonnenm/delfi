@@ -3,6 +3,8 @@ import numpy as np
 import theano.tensor as tt
 
 from delfi.inference.BaseInference import BaseInference
+from delfi.distribution.mixture.BaseMixture import BaseMixture
+from delfi.distribution import Gaussian, Uniform
 from delfi.neuralnet.NeuralNet import NeuralNet
 from delfi.neuralnet.Trainer import Trainer
 from delfi.neuralnet.loss.regularizer import svi_kl_zero
@@ -159,19 +161,9 @@ class CDELFI(BaseInference):
 
             if self.round > 1:
                 # posterior becomes new proposal prior
-                if self.round==2 or isinstance(self.generator.proposal, (dd.Uniform,dd.Gaussian)):  
-                    proposal = self.predict(self.obs)
-                elif len(self.generator.proposal.xs) <= n_components:
-                    print('correcting for MoG proposal')
-                    proposal = self.predict_from_MoG_prop(self.obs)
-                else:
-                    raise NotImplementedError
-
-                if project_proposal and isinstance(posterior, dd.mixture.BaseMixture.BaseMixture):
+                proposal = self.predict(self.obs)
+                if isinstance(proposal, BaseMixture) and (len(proposal.xs)==1 or project_proposal):  
                     proposal = proposal.project_to_gaussian()
-
-                if isinstance(proposal, dd.MoG) and len(proposal.xs) == 1:  
-                    proposal = proposal.project_to_gaussian()               
                 self.generator.proposal = proposal 
 
             # number of training examples for this round
@@ -204,34 +196,46 @@ class CDELFI(BaseInference):
                                 n_inputs_hidden=self.network.n_inputs_hidden))
             trn_datasets.append(trn_data)
 
-            if self.round==1 or isinstance(self.generator.proposal, (dd.Uniform,dd.Gaussian)):  
-                posterior = self.predict(self.obs)
-            elif len(self.generator.proposal.xs) >= n_components:                    
-                print('correcting for MoG proposal')
-                posterior = self.predict_from_MoG_prop(self.obs)
-            else:
-                raise NotImplementedError
-
-            posteriors.append(posterior)
+            posteriors.append(self.predict(self.obs))
 
             if not sbc_fun is None:
-                #try:
                 print('computing simulation-based calibration')
                 sbc = SBC(generator=self.generator, inf=self, f=sbc_fun)
-                logs[-1]['sbc'] = sbc.test(N=None, L=100, 
-                                           data=(trn_data[0], trn_data[1]))
-                #except:
-                #    print('SBC failed')
-
-            #except:
-            #    posteriors.append(None)
-            #    print('analytic correction for proposal seemingly failed!')
-            #    break
+                data = (trn_data[0]*self.params_std+self.params_mean,
+                        trn_data[1])
+                logs[-1]['sbc'] = sbc.test(N=None, L=100, data=data)
 
         return logs, trn_datasets, posteriors
 
-    def predict(self, x, threshold=0.01):
+
+    def predict(self, x, threhold=0.01):
         """Predict posterior given x
+
+        Parameters
+        ----------
+        x : array
+            Stats for which to compute the posterior
+        threshold: float
+            Threshold for pruning MoG components (percent of posterior mass)
+        """
+        proposal = self.generator.proposal
+
+        if proposal is None or isinstance(proposal, (Uniform,Gaussian)):  
+            posterior = self._predict_from_Gaussian_prop(self.obs)
+        elif len(self.generator.proposal.xs) >= n_components:                    
+            print('correcting for MoG proposal')
+            posterior = self._predict_from_MoG_prop(self.obs)
+        else:
+            raise NotImplementedError
+
+        return posterior
+
+    def _predict_from_Gaussian_prop(self, x, threshold=0.01):
+        """Predict posterior given x
+
+        Predicts posteriors from the attached MDN and corrects for
+        missmatch in the prior and proposal prior if the latter is
+        given by a Gaussian object.
 
         Parameters
         ----------
@@ -246,7 +250,6 @@ class CDELFI(BaseInference):
         else:
             # mog is posterior given proposal prior
             mog = super(CDELFI, self).predict(x)  # via super
-
             mog.prune_negligible_components(threshold=threshold)
 
             # compute posterior given prior by analytical division step
@@ -260,7 +263,7 @@ class CDELFI(BaseInference):
 
             return posterior
 
-    def predict_from_MoG_prop(self, x, threshold=0.01):
+    def _predict_from_MoG_prop(self, x, threshold=0.01):
         """Predict posterior given x
 
         Predicts posteriors from the attached MDN and corrects for
@@ -402,7 +405,7 @@ class CDELFI(BaseInference):
         noise.  
 
         """
-        assert isinstance(self.generator.proposal, dd.Gaussian) 
+        assert isinstance(self.generator.proposal, Gaussian) 
 
         # grab activation from last hidden layer
         last_hidden = self.network.layer['mixture_weights'].input_layer
