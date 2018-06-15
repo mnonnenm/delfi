@@ -262,12 +262,68 @@ class CDELFI(BaseInference):
             if 'Uniform' in str(type(self.generator.prior)):
                 posterior = mog / self.generator.proposal
             elif 'Gaussian' in str(type(self.generator.prior)):
-                posterior = (mog * self.generator.prior) / \
-                    self.generator.proposal
+                try: 
+                    posterior = (mog * self.generator.prior) / \
+                        self.generator.proposal
+                except: 
+                    print('analytical correction seemingly broke.')
+                    print('attempting to save the prediction.')
+                    posterior = self._backup_predict_from_Gaussian_prop(mog)
             else:
                 raise NotImplemented
 
             return posterior
+
+    def _backup_predict_from_Gaussian_prop(self, mog, thresh=0.):
+        """Predict posterior given x
+
+        Predicts posteriors from the attached MDN and corrects for
+        missmatch in the prior and proposal prior if the latter is
+        given by a Gaussian object.
+
+        Can still be used if the result would have improper covariances: 
+        Will try to replace directions of negative precisions in the 
+        posterior with proposal precisions. 
+
+        Parameters
+        ----------
+        mog : mixture of Gaussian object
+            Uncorrected MoG posterior estimate
+        thresh : float
+            Threshold for precisions of the MoG components.
+            Pick >0 for added numerical stability. 
+        """
+
+        proposal, prior = self.generator.proposal, self.generator.prior
+        assert isinstance(proposal, Gaussian) and isinstance(prior, Gaussian)
+
+        xs_new = []
+        for c in mog.xs:
+
+            # corrected precision matrix
+            Pc = c.P - proposal.P + prior.P
+
+            # spectrum and eigenvectors of corrected precision matrix
+            Lu, Q = np.linalg.eig(Pc)
+            # precisions along eigenvectors of corrected precision matrix
+            Lp = np.diag((Q.T.dot(g.proposal.P).dot(Q)))
+
+            # identify degenerate precisions
+            idx = np.where(Lu <= thresh)[0]
+
+            # replace degenerate precisions with those from proposal
+            L = Lu.copy()
+            if idx.size > 0:
+                L[idx] = np.maximum( Lp[idx], thresh )
+
+            # recompute means and covariances
+            S = Q.dot(np.diag(1./L)).dot(Q.T)
+            m = S.dot(c.Pm - proposal.Pm + prior.Pm) 
+
+            xs_new.append(Gaussian(m=m, S=S))
+
+        return dd.MoG(xs = xs_new, a = mog.a)
+
 
     def _predict_from_MoG_prop(self, x, threshold=0.01):
         """Predict posterior given x
@@ -291,8 +347,9 @@ class CDELFI(BaseInference):
         mog = super(CDELFI, self).predict(x)  # via super
         mog.prune_negligible_components(threshold=threshold)
 
-        prop  = self.generator.proposal
-        prior = self.generator.prior
+        proposal, prior = self.generator.proposal, self.generator.prior
+        assert isinstance(prior, Gaussian)
+
         ldetP0, d0  = logdet(prior.P), prior.m.dot(prior.Pm)
         means = np.vstack([c.m for c in prop.xs])
 
