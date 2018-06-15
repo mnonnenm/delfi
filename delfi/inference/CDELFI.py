@@ -196,7 +196,13 @@ class CDELFI(BaseInference):
                                 n_inputs_hidden=self.network.n_inputs_hidden))
             trn_datasets.append(trn_data)
 
-            posteriors.append(self.predict(self.obs))
+            try:
+                posteriors.append(self.predict(self.obs))
+            except:
+                posteriors.append(None)
+                print('analytical correction broke !')
+                break
+
 
             if not sbc_fun is None:
                 print('computing simulation-based calibration')
@@ -222,7 +228,7 @@ class CDELFI(BaseInference):
 
         if proposal is None or isinstance(proposal, (Uniform,Gaussian)):  
             posterior = self._predict_from_Gaussian_prop(self.obs)
-        elif len(self.generator.proposal.xs) >= n_components:                    
+        elif len(self.generator.proposal.xs) <= self.network.n_components:                    
             print('correcting for MoG proposal')
             posterior = self._predict_from_MoG_prop(self.obs)
         else:
