@@ -351,7 +351,7 @@ class CDELFI(BaseInference):
         assert isinstance(prior, Gaussian)
 
         ldetP0, d0  = logdet(prior.P), prior.m.dot(prior.Pm)
-        means = np.vstack([c.m for c in prop.xs])
+        means = np.vstack([c.m for c in proposal.xs])
 
         xs_new, a_new = [], []
         for c in mog.xs:
@@ -361,8 +361,8 @@ class CDELFI(BaseInference):
             dists = np.sum( (means - np.atleast_2d(c.m))**2, axis=1)
             i = np.argmin(dists)
 
-            c_prop = prop.xs[i]
-            a_prop = prop.a[i]
+            c_prop = proposal.xs[i]
+            a_prop = proposal.a[i]
 
             # correct means and covariances of individual proposals
             c_post = (c * prior) / c_prop
