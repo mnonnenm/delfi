@@ -306,7 +306,7 @@ class CDELFI(BaseInference):
             # spectrum and eigenvectors of corrected precision matrix
             Lu, Q = np.linalg.eig(Pc)
             # precisions along eigenvectors of corrected precision matrix
-            Lp = np.diag((Q.T.dot(g.proposal.P).dot(Q)))
+            Lp = np.diag((Q.T.dot(proposal.P).dot(Q)))
 
             # identify degenerate precisions
             idx = np.where(Lu <= thresh)[0]
@@ -345,7 +345,6 @@ class CDELFI(BaseInference):
         """
         # mog is posterior given proposal prior
         mog = super(CDELFI, self).predict(x)  # via super
-        mog.prune_negligible_components(threshold=threshold)
 
         proposal, prior = self.generator.proposal, self.generator.prior
         assert isinstance(prior, Gaussian)
@@ -354,7 +353,7 @@ class CDELFI(BaseInference):
         means = np.vstack([c.m for c in proposal.xs])
 
         xs_new, a_new = [], []
-        for c in mog.xs:
+        for c, j in zip(mog.xs, np.arange(mog.a.size)):
 
             # greedily pairing proposal and posterior components by means
             # (should probably at least use Mahalanobis distance)
@@ -370,7 +369,7 @@ class CDELFI(BaseInference):
             # correct mixture coefficients a[i]
 
             # prefactors
-            log_a = np.log(mog.a[i]) - np.log(a_prop) 
+            log_a = np.log(mog.a[j]) - np.log(a_prop) 
             # determinants
             log_a += 0.5 * (logdet(c.P)+ldetP0-logdet(c_prop.P)-logdet(c_post.P))
             # Mahalanobis distances
@@ -387,7 +386,10 @@ class CDELFI(BaseInference):
         # alpha defined only up to \tilde{p}(x) / p(x), i.e. need to normalize
         a_new /= a_new.sum()
 
-        return dd.MoG( xs = xs_new, a = a_new )
+        mog = dd.MoG( xs = xs_new, a = a_new )
+        mog.prune_negligible_components(threshold=threshold)
+
+        return mog
 
 
     def predict_uncorrected(self, x):

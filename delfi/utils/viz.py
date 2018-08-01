@@ -132,11 +132,27 @@ def plot_diag_axis(ax, i, pdfs, colors, samples, lims, gt, bins, resolution, his
     if gt is not None:
         ax.axvline(gt[i], color='r')
 
+
+    if labels_params is not None:
+        ax.set_xlabel(labels_params[i], fontsize=fontscale * 20)
+    else:
+        ax.set_xlabel("")
+
     if ticks:
-        ax.get_yaxis().set_tick_params(
-            which='both', direction='out', labelsize=fontscale * 15)
-        ax.get_xaxis().set_tick_params(
-            which='both', direction='out', labelsize=fontscale * 15)
+
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+
+        ax.set_yticks([])        
+        ax.set_xticks(np.round(lims[i]*10)/10)
+
+        if i < 2:
+            ax.set_xticklabels([r"$%d^\circ$" %np.int(np.round(lim/np.pi * 180)) for lim in lims[i]])
+        #ax.get_yaxis().set_tick_params(
+        #    which='both', direction='out', labelsize=fontscale * 15)
+        #ax.get_xaxis().set_tick_params(
+        #    which='both', direction='out', labelsize=fontscale * 15)
 #                         axes[i,j].locator_params(nbins=3)
         #axes[i,j].set_xticks(np.linspace(
         #    lims[i, 0]+0.15*np.abs(lims[i, 0]-lims[j, 1]), lims[j, 1]-0.15*np.abs(lims[i, 0]-lims[j, 1]), 2))
@@ -148,11 +164,10 @@ def plot_diag_axis(ax, i, pdfs, colors, samples, lims, gt, bins, resolution, his
     else:
         ax.get_xaxis().set_ticks([])
         ax.get_yaxis().set_ticks([])
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)        
 
-    if labels_params is not None:
-        ax.set_xlabel(labels_params[i], fontsize=fontscale * 20)
-    else:
-        ax.set_xlabel("")
 
     x0, x1 = ax.get_xlim()
     y0, y1 = ax.get_ylim()
